@@ -576,7 +576,7 @@ public:
     }
 
     BuildOptions()
-    : alwaysAddMask(Stmt::lastStmtConstant, false)
+    : alwaysAddMask(Stmt::lastStmtConstant+1, false)
       ,forcedBlkExprs(0), PruneTriviallyFalseEdges(true)
       ,AddEHEdges(false)
       ,AddInitializers(false)
