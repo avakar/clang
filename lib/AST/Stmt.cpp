@@ -801,3 +801,18 @@ SEHFinallyStmt* SEHFinallyStmt::Create(ASTContext &C,
                                        Stmt *Block) {
   return new(C)SEHFinallyStmt(Loc,Block);
 }
+
+// YieldStmt
+SourceRange YieldStmt::getSourceRange() const {
+  if (YieldExpr)
+    return SourceRange(YieldLoc, YieldExpr->getLocEnd());
+  else
+    return SourceRange(YieldLoc);
+}
+
+const Expr* YieldStmt::getYieldedValue() const {
+  return cast_or_null<Expr>(YieldExpr);
+}
+Expr* YieldStmt::getYieldedValue() {
+  return cast_or_null<Expr>(YieldExpr);
+}

@@ -2161,6 +2161,7 @@ public:
                                          bool AllowFunctionParameters);
   
   StmtResult ActOnReturnStmt(SourceLocation ReturnLoc, Expr *RetValExp);
+  StmtResult ActOnYieldStmt(SourceLocation YieldLoc, Expr *YieldedValExp);
   StmtResult ActOnBlockReturnStmt(SourceLocation ReturnLoc, Expr *RetValExp);
 
   StmtResult ActOnAsmStmt(SourceLocation AsmLoc,

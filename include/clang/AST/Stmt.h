@@ -1223,6 +1223,40 @@ public:
   }
 };
 
+class YieldStmt : public Stmt {
+  Stmt *YieldExpr;
+  SourceLocation YieldLoc;
+  
+public:
+  YieldStmt(SourceLocation RL)
+    : Stmt(YieldStmtClass), YieldExpr(0), YieldLoc(RL) { }
+
+  YieldStmt(SourceLocation RL, Expr *E)
+    : Stmt(YieldStmtClass), YieldExpr(reinterpret_cast<Stmt *>(E)), YieldLoc(RL) {}
+
+  explicit YieldStmt(EmptyShell Empty) : Stmt(YieldStmtClass, Empty) { }
+
+  const Expr *getYieldedValue() const;
+  Expr *getYieldedValue();
+  void setYieldedValue(Expr *E) { YieldExpr = reinterpret_cast<Stmt *>(E); }
+
+  SourceLocation getYieldLoc() const { return YieldLoc; }
+  void setYieldLoc(SourceLocation L) { YieldLoc = L; }
+
+  SourceRange getSourceRange() const;
+
+  static bool classof(const Stmt *T) {
+    return T->getStmtClass() == YieldStmtClass;
+  }
+  static bool classof(const YieldStmt *) { return true; }
+
+  // Iterators
+  child_range children() {
+    if (YieldExpr) return child_range(&YieldExpr, &YieldExpr+1);
+    return child_range();
+  }
+};
+
 /// AsmStmt - This represents a GNU inline-assembly statement extension.
 ///
 class AsmStmt : public Stmt {

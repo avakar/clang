@@ -1486,6 +1486,7 @@ private:
   StmtResult ParseContinueStatement(ParsedAttributes &Attr);
   StmtResult ParseBreakStatement(ParsedAttributes &Attr);
   StmtResult ParseReturnStatement(ParsedAttributes &Attr);
+  StmtResult ParseYieldStatement(ParsedAttributes &Attr);
   StmtResult ParseAsmStatement(bool &msAsm);
   StmtResult ParseMicrosoftAsmStatement(SourceLocation AsmLoc);
   

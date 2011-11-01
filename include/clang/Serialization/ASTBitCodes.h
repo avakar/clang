@@ -928,6 +928,8 @@ namespace clang {
       STMT_BREAK,
       /// \brief A ReturnStmt record.
       STMT_RETURN,
+      /// \brief A YieldStmt record.
+      STMT_YIELD,
       /// \brief A DeclStmt record.
       STMT_DECL,
       /// \brief An AsmStmt record.

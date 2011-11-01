@@ -69,6 +69,7 @@ using namespace clang;
 ///         'continue' ';'
 ///         'break' ';'
 ///         'return' expression[opt] ';'
+///         '__yield' expression[opt] ';'
 /// [GNU]   'goto' '*' expression ';'
 ///
 /// [OBC] objc-throw-statement:
@@ -262,6 +263,10 @@ Retry:
   case tok::kw_return:              // C99 6.8.6.4: return-statement
     Res = ParseReturnStatement(attrs);
     SemiError = "return";
+    break;
+  case tok::kw___yield:              // clang extension: yield-statement
+    Res = ParseYieldStatement(attrs);
+    SemiError = "__yield";
     break;
 
   case tok::kw_asm: {
@@ -1583,6 +1588,45 @@ StmtResult Parser::ParseReturnStatement(ParsedAttributes &attrs) {
     }
   }
   return Actions.ActOnReturnStmt(ReturnLoc, R.take());
+}
+
+/// ParseYieldStatement
+///       jump-statement:
+///         '__yield' expression[opt] ';'
+StmtResult Parser::ParseYieldStatement(ParsedAttributes &attrs) {
+  // FIXME: Use attributes?
+
+  assert(Tok.is(tok::kw___yield) && "Not a yield stmt!");
+  SourceLocation YieldLoc = ConsumeToken();  // eat the '__yield'.
+
+  ExprResult R;
+  if (Tok.isNot(tok::semi)) {
+    if (Tok.is(tok::code_completion)) {
+      // FIXME: We currently assume that the code-completion for __yield is the same as for return.
+      // (and I personally can't think of a situation where this wouldn't hold.)
+      Actions.CodeCompleteReturn(getCurScope());
+      cutOffParsing();
+      return StmtError();
+    }
+
+    // FIXME: This is a hack to allow something like C++0x's generalized
+    // initializer lists, but only enough of this feature to allow Clang to
+    // parse libstdc++ 4.5's headers.
+    if (Tok.is(tok::l_brace) && getLang().CPlusPlus) {
+      R = ParseInitializer();
+      if (R.isUsable())
+        Diag(R.get()->getLocStart(), getLang().CPlusPlus0x ?
+             diag::warn_cxx98_compat_generalized_initializer_lists :
+             diag::ext_generalized_initializer_lists)
+          << R.get()->getSourceRange();
+    } else
+        R = ParseExpression();
+    if (R.isInvalid()) {  // Skip to the semicolon, but don't consume it.
+      SkipUntil(tok::semi, false, true);
+      return StmtError();
+    }
+  }
+  return Actions.ActOnYieldStmt(YieldLoc, R.take());
 }
 
 /// ParseMicrosoftAsmStatement. When -fms-extensions/-fasm-blocks is enabled,

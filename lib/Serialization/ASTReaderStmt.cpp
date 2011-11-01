@@ -250,6 +250,12 @@ void ASTStmtReader::VisitReturnStmt(ReturnStmt *S) {
   S->setNRVOCandidate(ReadDeclAs<VarDecl>(Record, Idx));
 }
 
+void ASTStmtReader::VisitYieldStmt(YieldStmt *S) {
+  VisitStmt(S);
+  S->setYieldedValue(Reader.ReadSubExpr());
+  S->setYieldLoc(ReadSourceLocation(Record, Idx));
+}
+
 void ASTStmtReader::VisitDeclStmt(DeclStmt *S) {
   VisitStmt(S);
   S->setStartLoc(ReadSourceLocation(Record, Idx));
@@ -1571,6 +1577,10 @@ Stmt *ASTReader::ReadStmtFromStream(Module &F) {
 
     case STMT_RETURN:
       S = new (Context) ReturnStmt(Empty);
+      break;
+
+    case STMT_YIELD:
+      S = new (Context) YieldStmt(Empty);
       break;
 
     case STMT_DECL:

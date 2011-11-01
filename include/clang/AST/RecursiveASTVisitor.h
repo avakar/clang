@@ -1775,7 +1775,7 @@ DEF_TRAVERSE_STMT(MSDependentExistsStmt, {
 DEF_TRAVERSE_STMT(ReturnStmt, { })
 DEF_TRAVERSE_STMT(SwitchStmt, { })
 DEF_TRAVERSE_STMT(WhileStmt, { })
-
+DEF_TRAVERSE_STMT(YieldStmt, { })
 
 DEF_TRAVERSE_STMT(CXXDependentScopeMemberExpr, {
     TRY_TO(TraverseNestedNameSpecifierLoc(S->getQualifierLoc()));

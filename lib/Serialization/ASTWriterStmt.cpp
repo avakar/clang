@@ -198,6 +198,13 @@ void ASTStmtWriter::VisitReturnStmt(ReturnStmt *S) {
   Code = serialization::STMT_RETURN;
 }
 
+void ASTStmtWriter::VisitYieldStmt(YieldStmt *S) {
+  VisitStmt(S);
+  Writer.AddStmt(S->getYieldedValue());
+  Writer.AddSourceLocation(S->getYieldLoc(), Record);
+  Code = serialization::STMT_YIELD;
+}
+
 void ASTStmtWriter::VisitDeclStmt(DeclStmt *S) {
   VisitStmt(S);
   Writer.AddSourceLocation(S->getStartLoc(), Record);

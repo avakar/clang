@@ -349,6 +349,14 @@ void StmtPrinter::VisitReturnStmt(ReturnStmt *Node) {
   OS << ";\n";
 }
 
+void StmtPrinter::VisitYieldStmt(YieldStmt *Node) {
+  Indent() << "__yield";
+  if (Node->getYieldedValue()) {
+    OS << " ";
+    PrintExpr(Node->getYieldedValue());
+  }
+  OS << ";\n";
+}
 
 void StmtPrinter::VisitAsmStmt(AsmStmt *Node) {
   Indent() << "asm ";

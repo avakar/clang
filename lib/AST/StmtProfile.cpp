@@ -149,6 +149,10 @@ void StmtProfiler::VisitReturnStmt(const ReturnStmt *S) {
   VisitStmt(S);
 }
 
+void StmtProfiler::VisitYieldStmt(const YieldStmt *S) {
+  VisitStmt(S);
+}
+
 void StmtProfiler::VisitAsmStmt(const AsmStmt *S) {
   VisitStmt(S);
   ID.AddBoolean(S->isVolatile());

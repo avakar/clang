@@ -1969,6 +1969,11 @@ Sema::ActOnReturnStmt(SourceLocation ReturnLoc, Expr *RetValExp) {
   return Owned(Result);
 }
 
+StmtResult
+Sema::ActOnYieldStmt(SourceLocation YieldLoc, Expr *YieldValExp) {
+  return new (Context) YieldStmt(YieldLoc, YieldValExp);
+}
+
 /// CheckAsmLValue - GNU C has an extremely ugly extension whereby they silently
 /// ignore "noop" casts in places where an lvalue is required by an inline asm.
 /// We emulate this behavior when -fheinous-gnu-extensions is specified, but

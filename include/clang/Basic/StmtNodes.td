@@ -159,3 +159,6 @@ def MSDependentExistsStmt : Stmt;
 
 // OpenCL Extensions.
 def AsTypeExpr : DStmt<Expr>;
+
+// Yield Extension.
+def YieldStmt : Stmt;

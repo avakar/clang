@@ -513,6 +513,8 @@ ALIAS("__char32_t"   , char32_t   , KEYCXX)
 // Clang-specific keywords enabled only in testing.
 TESTING_KEYWORD(__unknown_anytype , KEYALL)
 
+// The __yield keyword for the yield extension
+KEYWORD(__yield                   , KEYALL)
 
 //===----------------------------------------------------------------------===//
 // Objective-C @-preceded keywords.
