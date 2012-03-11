@@ -1,6 +1,7 @@
 // RUN: %clang_cc1 -triple x86_64-apple-darwin10 -fsyntax-only -fobjc-arc -fobjc-runtime-has-weak -x objective-c %s.result
 // RUN: arcmt-test --args -triple x86_64-apple-macosx10.7 -fsyntax-only %s > %t
 // RUN: diff %t %s.result
+// DISABLE: mingw32
 
 #include "Common.h"
 
@@ -22,7 +23,7 @@ typedef _NSCachedAttributedString *BadClassForWeak;
   Forw *__unsafe_unretained not_safe3;
   Foo *assign_plus1;
 }
-@property (readonly) Foo *x;
+@property (weak, readonly) Foo *x;
 @property (weak) Foo *w;
 @property (weak) Foo *q1, *q2;
 @property (unsafe_unretained) WeakOptOut *oo;
@@ -31,15 +32,15 @@ typedef _NSCachedAttributedString *BadClassForWeak;
 @property (unsafe_unretained) NSObject *not_safe2;
 @property (unsafe_unretained) Forw *not_safe3;
 @property (readonly) Foo *assign_plus1;
-@property (strong, readonly) Foo *assign_plus2;
-@property (strong, readonly) Foo *assign_plus3;
+@property (readonly) Foo *assign_plus2;
+@property (readonly) Foo *assign_plus3;
 
 @property (weak) Foo *no_user_ivar1;
 @property (weak, readonly) Foo *no_user_ivar2;
 
-@property  id def1;
-@property (atomic) id def2;
-@property (atomic) id def3;
+@property (strong) id def1;
+@property (atomic,strong) id def2;
+@property (strong,atomic) id def3;
 
 @end
 

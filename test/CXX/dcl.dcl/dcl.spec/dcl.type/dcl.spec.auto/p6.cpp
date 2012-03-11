@@ -92,7 +92,7 @@ namespace PR10939 {
   template<typename T> T g(T);
 
   void f(X *x) {
-    auto value = x->method; // expected-error{{variable 'value' with type 'auto' has incompatible initializer of type '<bound member function type>'}}
+    auto value = x->method; // expected-error {{reference to non-static member function must be called}}
     if (value) { }
 
     auto funcptr = &g<int>;
@@ -100,4 +100,5 @@ namespace PR10939 {
   }
 }
 
-// TODO: if the initializer is a braced-init-list, deduce auto as std::initializer_list<T>.
+// if the initializer is a braced-init-list, deduce auto as std::initializer_list<T>:
+// see SemaCXX/cxx0x-initializer-stdinitializerlist.cpp

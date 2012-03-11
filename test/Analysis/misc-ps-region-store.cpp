@@ -1,5 +1,5 @@
-// RUN: %clang_cc1 -triple i386-apple-darwin9 -analyze -analyzer-checker=core,experimental.core -analyzer-store=region -verify -fblocks -analyzer-opt-analyze-nested-blocks %s
-// RUN: %clang_cc1 -triple x86_64-apple-darwin9 -analyze -analyzer-checker=core,experimental.core -analyzer-store=region -verify -fblocks   -analyzer-opt-analyze-nested-blocks %s
+// RUN: %clang_cc1 -triple i386-apple-darwin9 -analyze -analyzer-checker=core,experimental.core -analyzer-store=region -verify -fblocks -analyzer-opt-analyze-nested-blocks %s -fexceptions -fcxx-exceptions
+// RUN: %clang_cc1 -triple x86_64-apple-darwin9 -analyze -analyzer-checker=core,experimental.core -analyzer-store=region -verify -fblocks   -analyzer-opt-analyze-nested-blocks %s -fexceptions -fcxx-exceptions
 
 // Test basic handling of references.
 char &test1_aux();
@@ -466,4 +466,66 @@ void rdar10202899_test3() {
   *p = 0xDEADBEEF;
 }
 
+// This used to crash the analyzer because of the unnamed bitfield.
+void PR11249()
+{
+  struct {
+    char f1:4;
+    char   :4;
+    char f2[1];
+    char f3;
+  } V = { 1, {2}, 3 };
+  int *p = 0;
+  if (V.f1 != 1)
+    *p = 0xDEADBEEF;  // no-warning
+  if (V.f2[0] != 2)
+    *p = 0xDEADBEEF;  // no-warning
+  if (V.f3 != 3)
+    *p = 0xDEADBEEF;  // no-warning
+}
+
+// Handle doing a load from the memory associated with the code for
+// a function.
+extern double nan( const char * );
+double PR11450() {
+  double NaN = *(double*) nan;
+  return NaN;
+}
+
+// Test that 'this' is assumed non-null upon analyzing the entry to a "top-level"
+// function (i.e., when not analyzing from a specific caller).
+struct TestNullThis {
+  int field;
+  void test();
+};
+
+void TestNullThis::test() {
+  int *p = &field;
+  if (p)
+    return;
+  field = 2; // no-warning
+}
+
+// Test handling of 'catch' exception variables, and not warning
+// about uninitialized values.
+enum MyEnum { MyEnumValue };
+MyEnum rdar10892489() {
+  try {
+      throw MyEnumValue;
+  } catch (MyEnum e) {
+      return e; // no-warning
+  }
+  return MyEnumValue;
+}
+
+MyEnum rdar10892489_positive() {
+  try {
+    throw MyEnumValue;
+  } catch (MyEnum e) {
+    int *p = 0;
+    *p = 0xDEADBEEF; // expected-warning {{null}}
+    return e;
+  }
+  return MyEnumValue;
+}
 

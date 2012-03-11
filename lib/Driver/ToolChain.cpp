@@ -14,31 +14,30 @@
 #include "clang/Driver/ArgList.h"
 #include "clang/Driver/Driver.h"
 #include "clang/Driver/DriverDiagnostic.h"
-#include "clang/Driver/HostInfo.h"
 #include "clang/Driver/ObjCRuntime.h"
 #include "clang/Driver/Options.h"
 #include "llvm/Support/ErrorHandling.h"
 using namespace clang::driver;
 using namespace clang;
 
-ToolChain::ToolChain(const HostInfo &H, const llvm::Triple &T)
-  : Host(H), Triple(T) {
+ToolChain::ToolChain(const Driver &D, const llvm::Triple &T)
+  : D(D), Triple(T) {
 }
 
 ToolChain::~ToolChain() {
 }
 
 const Driver &ToolChain::getDriver() const {
- return Host.getDriver();
+ return D;
 }
 
 std::string ToolChain::GetFilePath(const char *Name) const {
-  return Host.getDriver().GetFilePath(Name, *this);
+  return D.GetFilePath(Name, *this);
 
 }
 
 std::string ToolChain::GetProgramPath(const char *Name, bool WantFile) const {
-  return Host.getDriver().GetProgramPath(Name, *this, WantFile);
+  return D.GetProgramPath(Name, *this, WantFile);
 }
 
 types::ID ToolChain::LookupTypeForExtension(const char *Ext) const {
@@ -55,6 +54,7 @@ void ToolChain::configureObjCRuntime(ObjCRuntime &runtime) const {
     // Assume a minimal NeXT runtime.
     runtime.HasARC = false;
     runtime.HasWeak = false;
+    runtime.HasSubscripting = false;
     runtime.HasTerminate = false;
     return;
 
@@ -62,6 +62,7 @@ void ToolChain::configureObjCRuntime(ObjCRuntime &runtime) const {
     // Assume a maximal GNU runtime.
     runtime.HasARC = true;
     runtime.HasWeak = true;
+    runtime.HasSubscripting = false; // to be added
     runtime.HasTerminate = false; // to be added
     return;
   }
@@ -211,6 +212,27 @@ std::string ToolChain::ComputeEffectiveClangTriple(const ArgList &Args,
   return ComputeLLVMTriple(Args, InputType);
 }
 
+void ToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
+                                          ArgStringList &CC1Args) const {
+  // Each toolchain should provide the appropriate include flags.
+}
+
+ToolChain::RuntimeLibType ToolChain::GetRuntimeLibType(
+  const ArgList &Args) const
+{
+  if (Arg *A = Args.getLastArg(options::OPT_rtlib_EQ)) {
+    StringRef Value = A->getValue(Args);
+    if (Value == "compiler-rt")
+      return ToolChain::RLT_CompilerRT;
+    if (Value == "libgcc")
+      return ToolChain::RLT_Libgcc;
+    getDriver().Diag(diag::err_drv_invalid_rtlib_name)
+      << A->getAsString(Args);
+  }
+
+  return GetDefaultRuntimeLibType();
+}
+
 ToolChain::CXXStdlibType ToolChain::GetCXXStdlibType(const ArgList &Args) const{
   if (Arg *A = Args.getLastArg(options::OPT_stdlib_EQ)) {
     StringRef Value = A->getValue(Args);
@@ -225,24 +247,52 @@ ToolChain::CXXStdlibType ToolChain::GetCXXStdlibType(const ArgList &Args) const{
   return ToolChain::CST_Libstdcxx;
 }
 
-void ToolChain::AddClangCXXStdlibIncludeArgs(const ArgList &Args,
-                                             ArgStringList &CmdArgs,
-                                             bool ObjCXXAutoRefCount) const {
-  CXXStdlibType Type = GetCXXStdlibType(Args);
+/// \brief Utility function to add a system include directory to CC1 arguments.
+/*static*/ void ToolChain::addSystemInclude(const ArgList &DriverArgs,
+                                            ArgStringList &CC1Args,
+                                            const Twine &Path) {
+  CC1Args.push_back("-internal-isystem");
+  CC1Args.push_back(DriverArgs.MakeArgString(Path));
+}
 
-  // Header search paths are handled by the mass of goop in InitHeaderSearch.
+/// \brief Utility function to add a system include directory with extern "C"
+/// semantics to CC1 arguments.
+///
+/// Note that this should be used rarely, and only for directories that
+/// historically and for legacy reasons are treated as having implicit extern
+/// "C" semantics. These semantics are *ignored* by and large today, but its
+/// important to preserve the preprocessor changes resulting from the
+/// classification.
+/*static*/ void ToolChain::addExternCSystemInclude(const ArgList &DriverArgs,
+                                                   ArgStringList &CC1Args,
+                                                   const Twine &Path) {
+  CC1Args.push_back("-internal-externc-isystem");
+  CC1Args.push_back(DriverArgs.MakeArgString(Path));
+}
 
-  switch (Type) {
-  case ToolChain::CST_Libcxx:
-    if (ObjCXXAutoRefCount)
-      CmdArgs.push_back("-fobjc-arc-cxxlib=libc++");
-    break;
-
-  case ToolChain::CST_Libstdcxx:
-    if (ObjCXXAutoRefCount)
-      CmdArgs.push_back("-fobjc-arc-cxxlib=libstdc++");
-    break;
+/// \brief Utility function to add a list of system include directories to CC1.
+/*static*/ void ToolChain::addSystemIncludes(const ArgList &DriverArgs,
+                                             ArgStringList &CC1Args,
+                                             ArrayRef<StringRef> Paths) {
+  for (ArrayRef<StringRef>::iterator I = Paths.begin(), E = Paths.end();
+       I != E; ++I) {
+    CC1Args.push_back("-internal-isystem");
+    CC1Args.push_back(DriverArgs.MakeArgString(*I));
   }
+}
+
+void ToolChain::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
+                                             ArgStringList &CC1Args) const {
+  // Header search paths should be handled by each of the subclasses.
+  // Historically, they have not been, and instead have been handled inside of
+  // the CC1-layer frontend. As the logic is hoisted out, this generic function
+  // will slowly stop being called.
+  //
+  // While it is being called, replicate a bit of a hack to propagate the
+  // '-stdlib=' flag down to CC1 so that it can in turn customize the C++
+  // header search paths with it. Once all systems are overriding this
+  // function, the CC1 flag and this line can be removed.
+  DriverArgs.AddAllArgs(CC1Args, options::OPT_stdlib_EQ);
 }
 
 void ToolChain::AddCXXStdlibLibArgs(const ArgList &Args,

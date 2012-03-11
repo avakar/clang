@@ -34,8 +34,15 @@ public:
     return true;
   }
 
+  bool TraverseNestedNameSpecifierLoc(NestedNameSpecifierLoc NNS) {
+    IndexCtx.indexNestedNameSpecifierLoc(NNS, Parent, ParentDC);
+    return true;
+  }
+
   bool VisitTagTypeLoc(TagTypeLoc TL) {
     TagDecl *D = TL.getDecl();
+    if (D->getParentFunctionOrMethod())
+      return true;
 
     if (TL.isDefinition()) {
       IndexCtx.indexTagDecl(D);
@@ -63,6 +70,26 @@ public:
     }
     return true;
   }
+
+  bool VisitTemplateSpecializationTypeLoc(TemplateSpecializationTypeLoc TL) {
+    if (const TemplateSpecializationType *T = TL.getTypePtr()) {
+      if (IndexCtx.shouldIndexImplicitTemplateInsts()) {
+        if (CXXRecordDecl *RD = T->getAsCXXRecordDecl())
+          IndexCtx.handleReference(RD, TL.getTemplateNameLoc(),
+                                   Parent, ParentDC);
+      } else {
+        if (const TemplateDecl *D = T->getTemplateName().getAsTemplateDecl())
+          IndexCtx.handleReference(D, TL.getTemplateNameLoc(),
+                                   Parent, ParentDC);
+      }
+    }
+    return true;
+  }
+
+  bool TraverseStmt(Stmt *S) {
+    IndexCtx.indexBody(S, Parent, ParentDC);
+    return true;
+  }
 };
 
 } // anonymous namespace
@@ -73,22 +100,57 @@ void IndexingContext::indexTypeSourceInfo(TypeSourceInfo *TInfo,
   if (!TInfo || TInfo->getTypeLoc().isNull())
     return;
   
-  if (DC == 0)
-    DC = Parent->getDeclContext();
   indexTypeLoc(TInfo->getTypeLoc(), Parent, DC);
 }
 
 void IndexingContext::indexTypeLoc(TypeLoc TL,
                                    const NamedDecl *Parent,
                                    const DeclContext *DC) {
+  if (TL.isNull())
+    return;
+
+  if (DC == 0)
+    DC = Parent->getLexicalDeclContext();
   TypeIndexer(*this, Parent, DC).TraverseTypeLoc(TL);
 }
 
+void IndexingContext::indexNestedNameSpecifierLoc(NestedNameSpecifierLoc NNS,
+                                                  const NamedDecl *Parent,
+                                                  const DeclContext *DC) {
+  if (!NNS)
+    return;
+
+  if (NestedNameSpecifierLoc Prefix = NNS.getPrefix())
+    indexNestedNameSpecifierLoc(Prefix, Parent, DC);
+
+  if (DC == 0)
+    DC = Parent->getLexicalDeclContext();
+  SourceLocation Loc = NNS.getSourceRange().getBegin();
+
+  switch (NNS.getNestedNameSpecifier()->getKind()) {
+  case NestedNameSpecifier::Identifier:
+  case NestedNameSpecifier::Global:
+    break;
+
+  case NestedNameSpecifier::Namespace:
+    handleReference(NNS.getNestedNameSpecifier()->getAsNamespace(),
+                    Loc, Parent, DC);
+    break;
+  case NestedNameSpecifier::NamespaceAlias:
+    handleReference(NNS.getNestedNameSpecifier()->getAsNamespaceAlias(),
+                    Loc, Parent, DC);
+    break;
+
+  case NestedNameSpecifier::TypeSpec:
+  case NestedNameSpecifier::TypeSpecWithTemplate:
+    indexTypeLoc(NNS.getTypeLoc(), Parent, DC);
+    break;
+  }
+}
+
 void IndexingContext::indexTagDecl(const TagDecl *D) {
-  handleTagDecl(D);
-  if (D->isThisDeclarationADefinition()) {
-    invokeStartedTagTypeDefinition(D);
-    indexDeclContext(D);
-    invokeEndedContainer(D);
+  if (handleTagDecl(D)) {
+    if (D->isThisDeclarationADefinition())
+      indexDeclContext(D);
   }
 }

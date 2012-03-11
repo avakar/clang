@@ -16,7 +16,7 @@ int main() {
 
   ns1 = (__weak sub *)obj; // expected-error {{assignment of a weak-unavailable object to a __weak object}} \
                            // expected-error {{class is incompatible with __weak references}} \
-                           // expected-error {{explicit ownership qualifier on cast result would have no effect}}
+                           // expected-error {{explicit ownership qualifier on cast result has no effect}}
 }
 
 // rdar://9732636
@@ -32,7 +32,7 @@ NOWEAK * Test1() {
 
   __weak id weak2 = strong1; // expected-error {{assignment of a weak-unavailable object to a __weak object}}
   return (__weak id)strong1; // expected-error {{cast of weak-unavailable object of type 'NOWEAK *' to a __weak object of type '__weak id'}} \
-                             // expected-error {{explicit ownership qualifier on cast result would have no effect}}
+                             // expected-error {{explicit ownership qualifier on cast result has no effect}}
 }
 
 @protocol P @end
@@ -45,6 +45,20 @@ NOWEAK<P, P1> * Test2() {
 
   __weak id<P> weak2 = strong1; // expected-error {{assignment of a weak-unavailable object to a __weak object}}
   return (__weak id<P>)strong1; // expected-error {{cast of weak-unavailable object of type 'NOWEAK<P,P1> *' to a __weak object of type '__weak id<P>'}} \
-                                // expected-error {{explicit ownership qualifier on cast result would have no effect}}
+                                // expected-error {{explicit ownership qualifier on cast result has no effect}}
 }
 
+// rdar://10535245
+__attribute__((objc_arc_weak_reference_unavailable))
+@interface NSFont
+@end
+
+@interface I
+{
+}
+@property (weak) NSFont *font; // expected-note {{property declared here}}
+@end
+
+@implementation I
+@synthesize font = _font; // expected-error {{synthesis of a weak-unavailable property is disallowed because it requires synthesis of an ivar of the __weak object}}
+@end

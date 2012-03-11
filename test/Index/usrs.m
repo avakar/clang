@@ -1,4 +1,4 @@
-// RUN: c-index-test -test-load-source-usrs all %s | FileCheck %s
+                                                                 
 
 static inline int my_helper(int x, int y) { return x + y; }
 
@@ -80,6 +80,15 @@ int test_multi_declaration(void) {
 - (void)method;
 @end
 
+@interface CWithExt2
+@end
+@interface CWithExt2 () {
+  id var_ext;
+}
+@property (assign) id pro_ext;
+@end
+
+// RUN: c-index-test -test-load-source-usrs all -target x86_64-apple-macosx10.7 %s | FileCheck %s
 // CHECK: usrs.m c:usrs.m@67@F@my_helper Extent=[3:1 - 3:60]
 // CHECK: usrs.m c:usrs.m@95@F@my_helper@x Extent=[3:29 - 3:34]
 // CHECK: usrs.m c:usrs.m@102@F@my_helper@y Extent=[3:36 - 3:41]
@@ -118,9 +127,9 @@ int test_multi_declaration(void) {
 // CHECK: usrs.m c:usrs.m@551@F@local_func@x Extent=[49:23 - 49:28]
 // CHECK: usrs.m c:objc(cs)CWithExt Extent=[51:1 - 53:5]
 // CHECK: usrs.m c:objc(cs)CWithExt(im)meth1 Extent=[52:1 - 52:14]
-// CHECK: usrs.m c:objc(cs)CWithExt Extent=[54:1 - 56:5]
+// CHECK: usrs.m c:objc(ext)CWithExt@usrs.m@612 Extent=[54:1 - 56:5]
 // CHECK: usrs.m c:objc(cs)CWithExt(im)meth2 Extent=[55:1 - 55:14]
-// CHECK: usrs.m c:objc(cs)CWithExt Extent=[57:1 - 59:5]
+// CHECK: usrs.m c:objc(ext)CWithExt@usrs.m@654 Extent=[57:1 - 59:5]
 // CHECK: usrs.m c:objc(cs)CWithExt(im)meth3 Extent=[58:1 - 58:14]
 // CHECK: usrs.m c:objc(cy)CWithExt@Bar Extent=[60:1 - 62:5]
 // CHECK: usrs.m c:objc(cs)CWithExt(im)meth4 Extent=[61:1 - 61:14]
@@ -137,6 +146,12 @@ int test_multi_declaration(void) {
 // CHECK: usrs.m c:usrs.m@980@F@test_multi_declaration@baz Extent=[74:25 - 74:32]
 // CHECK: usrs.m c:objc(pl)P1 Extent=[79:1 - 81:5]
 // CHECK: usrs.m c:objc(pl)P1(im)method Extent=[80:1 - 80:16]
+// CHECK: usrs.m c:objc(cs)CWithExt2 Extent=[83:1 - 84:5]
+// CHECK: usrs.m c:objc(ext)CWithExt2@usrs.m@1111 Extent=[85:1 - 89:5]
+// CHECK: usrs.m c:objc(cs)CWithExt2@var_ext Extent=[86:3 - 86:13]
+// CHECK: usrs.m c:objc(cs)CWithExt2(py)pro_ext Extent=[88:1 - 88:30]
+// CHECK: usrs.m c:objc(cs)CWithExt2(im)pro_ext Extent=[88:23 - 88:30]
+// CHECK: usrs.m c:objc(cs)CWithExt2(im)setPro_ext: Extent=[88:23 - 88:30]
 
 // RUN: c-index-test -test-load-source all %s | FileCheck -check-prefix=CHECK-source %s
 // CHECK-source: usrs.m:3:19: FunctionDecl=my_helper:3:19 (Definition) Extent=[3:1 - 3:60]
@@ -174,7 +189,7 @@ int test_multi_declaration(void) {
 // CHECK-source: usrs.m:31:15: ObjCInstanceMethodDecl=setD1::31:15 Extent=[31:15 - 31:17]
 // CHECK-source: usrs.m:31:15: ParmDecl=d1:31:15 (Definition) Extent=[31:15 - 31:17]
 // CHECK-source: usrs.m:34:17: ObjCImplementationDecl=Foo:34:17 (Definition) Extent=[34:1 - 45:2]
-// CHECK-source: usrs.m:35:1: ObjCInstanceMethodDecl=godzilla:35:1 (Definition) [Overrides @29:1] Extent=[35:1 - 39:2]
+// CHECK-source: usrs.m:35:1: ObjCInstanceMethodDecl=godzilla:35:1 (Definition) Extent=[35:1 - 39:2]
 // CHECK-source: usrs.m:35:4: TypeRef=id:0:0 Extent=[35:4 - 35:6]
 // CHECK-source: usrs.m:35:17: CompoundStmt= Extent=[35:17 - 39:2]
 // CHECK-source: usrs.m:36:3: DeclStmt= Extent=[36:3 - 36:20]
@@ -185,7 +200,7 @@ int test_multi_declaration(void) {
 // CHECK-source: usrs.m:38:3: ReturnStmt= Extent=[38:3 - 38:11]
 // CHECK-source: usrs.m:38:10: UnexposedExpr= Extent=[38:10 - 38:11]
 // CHECK-source: usrs.m:38:10: IntegerLiteral= Extent=[38:10 - 38:11]
-// CHECK-source: usrs.m:40:1: ObjCClassMethodDecl=kingkong:40:1 (Definition) [Overrides @30:1] Extent=[40:1 - 43:2]
+// CHECK-source: usrs.m:40:1: ObjCClassMethodDecl=kingkong:40:1 (Definition) Extent=[40:1 - 43:2]
 // CHECK-source: usrs.m:40:4: TypeRef=id:0:0 Extent=[40:4 - 40:6]
 // CHECK-source: usrs.m:40:17: CompoundStmt= Extent=[40:17 - 43:2]
 // CHECK-source: usrs.m:41:3: DeclStmt= Extent=[41:3 - 41:17]
@@ -217,19 +232,19 @@ int test_multi_declaration(void) {
 // CHECK-source: usrs.m:61:1: ObjCInstanceMethodDecl=meth4:61:1 Extent=[61:1 - 61:14]
 // CHECK-source: usrs.m:61:4: TypeRef=id:0:0 Extent=[61:4 - 61:6]
 // CHECK-source: usrs.m:63:17: ObjCImplementationDecl=CWithExt:63:17 (Definition) Extent=[63:1 - 67:2]
-// CHECK-source: usrs.m:64:1: ObjCInstanceMethodDecl=meth1:64:1 (Definition) [Overrides @52:1] Extent=[64:1 - 64:27]
+// CHECK-source: usrs.m:64:1: ObjCInstanceMethodDecl=meth1:64:1 (Definition) Extent=[64:1 - 64:27]
 // CHECK-source: usrs.m:64:4: TypeRef=id:0:0 Extent=[64:4 - 64:6]
 // CHECK-source: usrs.m:64:14: CompoundStmt= Extent=[64:14 - 64:27]
 // CHECK-source: usrs.m:64:16: ReturnStmt= Extent=[64:16 - 64:24]
 // CHECK-source: usrs.m:64:23: UnexposedExpr= Extent=[64:23 - 64:24]
 // CHECK-source: usrs.m:64:23: IntegerLiteral= Extent=[64:23 - 64:24]
-// CHECK-source: usrs.m:65:1: ObjCInstanceMethodDecl=meth2:65:1 (Definition) [Overrides @55:1] Extent=[65:1 - 65:27]
+// CHECK-source: usrs.m:65:1: ObjCInstanceMethodDecl=meth2:65:1 (Definition) Extent=[65:1 - 65:27]
 // CHECK-source: usrs.m:65:4: TypeRef=id:0:0 Extent=[65:4 - 65:6]
 // CHECK-source: usrs.m:65:14: CompoundStmt= Extent=[65:14 - 65:27]
 // CHECK-source: usrs.m:65:16: ReturnStmt= Extent=[65:16 - 65:24]
 // CHECK-source: usrs.m:65:23: UnexposedExpr= Extent=[65:23 - 65:24]
 // CHECK-source: usrs.m:65:23: IntegerLiteral= Extent=[65:23 - 65:24]
-// CHECK-source: usrs.m:66:1: ObjCInstanceMethodDecl=meth3:66:1 (Definition) [Overrides @58:1] Extent=[66:1 - 66:27]
+// CHECK-source: usrs.m:66:1: ObjCInstanceMethodDecl=meth3:66:1 (Definition) Extent=[66:1 - 66:27]
 // CHECK-source: usrs.m:66:4: TypeRef=id:0:0 Extent=[66:4 - 66:6]
 // CHECK-source: usrs.m:66:14: CompoundStmt= Extent=[66:14 - 66:27]
 // CHECK-source: usrs.m:66:16: ReturnStmt= Extent=[66:16 - 66:24]
@@ -237,7 +252,7 @@ int test_multi_declaration(void) {
 // CHECK-source: usrs.m:66:23: IntegerLiteral= Extent=[66:23 - 66:24]
 // CHECK-source: usrs.m:68:17: ObjCCategoryImplDecl=Bar:68:17 (Definition) Extent=[68:1 - 70:2]
 // CHECK-source: usrs.m:68:17: ObjCClassRef=CWithExt:51:12 Extent=[68:17 - 68:25]
-// CHECK-source: usrs.m:69:1: ObjCInstanceMethodDecl=meth4:69:1 (Definition) [Overrides @61:1] Extent=[69:1 - 69:27]
+// CHECK-source: usrs.m:69:1: ObjCInstanceMethodDecl=meth4:69:1 (Definition) Extent=[69:1 - 69:27]
 // CHECK-source: usrs.m:69:4: TypeRef=id:0:0 Extent=[69:4 - 69:6]
 // CHECK-source: usrs.m:69:14: CompoundStmt= Extent=[69:14 - 69:27]
 // CHECK-source: usrs.m:69:16: ReturnStmt= Extent=[69:16 - 69:24]

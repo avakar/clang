@@ -147,7 +147,7 @@ public:
   /// \brief Return whether this visitor should recurse into the types of
   /// TypeLocs.
   bool shouldWalkTypesOfTypeLocs() const { return true; }
-  
+
   /// \brief Recursively visit a statement or expression, by
   /// dispatching to Traverse*() based on the argument's dynamic type.
   ///
@@ -181,7 +181,7 @@ public:
   /// \returns false if the visitation was terminated early, true otherwise.
   bool TraverseNestedNameSpecifier(NestedNameSpecifier *NNS);
 
-  /// \brief Recursively visit a C++ nested-name-specifier with location 
+  /// \brief Recursively visit a C++ nested-name-specifier with location
   /// information.
   ///
   /// \returns false if the visitation was terminated early, true otherwise.
@@ -191,7 +191,7 @@ public:
   ///
   /// \returns false if the visitation was terminated early, true otherwise.
   bool TraverseDeclarationNameInfo(DeclarationNameInfo NameInfo);
-  
+
   /// \brief Recursively visit a template name and dispatch to the
   /// appropriate method.
   ///
@@ -228,6 +228,11 @@ public:
   /// \returns false if the visitation was terminated early, true otherwise.
   bool TraverseConstructorInitializer(CXXCtorInitializer *Init);
 
+  /// \brief Recursively visit a lambda capture.
+  ///
+  /// \returns false if the visitation was terminated early, true otherwise.
+  bool TraverseLambdaCapture(LambdaExpr::Capture C);
+  
   // ---- Methods on Stmts ----
 
   // Declare Traverse*() for all concrete Stmt classes.
@@ -530,23 +535,23 @@ bool RecursiveASTVisitor<Derived>::TraverseNestedNameSpecifierLoc(
                                                   NestedNameSpecifierLoc NNS) {
   if (!NNS)
     return true;
-  
+
    if (NestedNameSpecifierLoc Prefix = NNS.getPrefix())
      TRY_TO(TraverseNestedNameSpecifierLoc(Prefix));
-           
+
   switch (NNS.getNestedNameSpecifier()->getKind()) {
   case NestedNameSpecifier::Identifier:
   case NestedNameSpecifier::Namespace:
   case NestedNameSpecifier::NamespaceAlias:
   case NestedNameSpecifier::Global:
     return true;
-     
+
   case NestedNameSpecifier::TypeSpec:
   case NestedNameSpecifier::TypeSpecWithTemplate:
     TRY_TO(TraverseTypeLoc(NNS.getTypeLoc()));
     break;
   }
-  
+
   return true;
 }
 
@@ -559,9 +564,9 @@ bool RecursiveASTVisitor<Derived>::TraverseDeclarationNameInfo(
   case DeclarationName::CXXConversionFunctionName:
     if (TypeSourceInfo *TSInfo = NameInfo.getNamedTypeInfo())
       TRY_TO(TraverseTypeLoc(TSInfo->getTypeLoc()));
-    
+
     break;
-    
+
   case DeclarationName::Identifier:
   case DeclarationName::ObjCZeroArgSelector:
   case DeclarationName::ObjCOneArgSelector:
@@ -571,7 +576,7 @@ bool RecursiveASTVisitor<Derived>::TraverseDeclarationNameInfo(
   case DeclarationName::CXXUsingDirective:
     break;
   }
-  
+
   return true;
 }
 
@@ -630,7 +635,7 @@ bool RecursiveASTVisitor<Derived>::TraverseTemplateArgumentLoc(
     // FIXME: how can TSI ever be NULL?
     if (TypeSourceInfo *TSI = ArgLoc.getTypeSourceInfo())
       return getDerived().TraverseTypeLoc(TSI->getTypeLoc());
-    else 
+    else
       return getDerived().TraverseType(Arg.getAsType());
   }
 
@@ -667,12 +672,18 @@ bool RecursiveASTVisitor<Derived>::TraverseTemplateArguments(
 template<typename Derived>
 bool RecursiveASTVisitor<Derived>::TraverseConstructorInitializer(
                                                      CXXCtorInitializer *Init) {
-  // FIXME: recurse on TypeLoc of the base initializer if isBaseInitializer()?
+  if (TypeSourceInfo *TInfo = Init->getTypeSourceInfo())
+    TRY_TO(TraverseTypeLoc(TInfo->getTypeLoc()));
+
   if (Init->isWritten())
     TRY_TO(TraverseStmt(Init->getInit()));
   return true;
 }
 
+template<typename Derived>
+bool RecursiveASTVisitor<Derived>::TraverseLambdaCapture(LambdaExpr::Capture C){
+  return true;
+}
 
 // ----------------- Type traversal -----------------
 
@@ -852,8 +863,8 @@ DEF_TRAVERSE_TYPE(AtomicType, {
 // ----------------- TypeLoc traversal -----------------
 
 // This macro makes available a variable TL, the passed-in TypeLoc.
-// If requested, it calls WalkUpFrom* for the Type in the given TypeLoc, 
-// in addition to WalkUpFrom* for the TypeLoc itself, such that existing 
+// If requested, it calls WalkUpFrom* for the Type in the given TypeLoc,
+// in addition to WalkUpFrom* for the TypeLoc itself, such that existing
 // clients that override the WalkUpFrom*Type() and/or Visit*Type() methods
 // continue to work.
 #define DEF_TRAVERSE_TYPELOC(TYPE, CODE)                                \
@@ -1052,7 +1063,7 @@ DEF_TRAVERSE_TYPELOC(DependentTemplateSpecializationType, {
     if (TL.getQualifierLoc()) {
       TRY_TO(TraverseNestedNameSpecifierLoc(TL.getQualifierLoc()));
     }
-    
+
     for (unsigned I = 0, E = TL.getNumArgs(); I != E; ++I) {
       TRY_TO(TraverseTemplateArgumentLoc(TL.getArgLoc(I)));
     }
@@ -1129,6 +1140,8 @@ DEF_TRAVERSE_DECL(FileScopeAsmDecl, {
     TRY_TO(TraverseStmt(D->getAsmString()));
   })
 
+DEF_TRAVERSE_DECL(ImportDecl, { })
+
 DEF_TRAVERSE_DECL(FriendDecl, {
     // Friend is either decl or a type.
     if (D->getFriendType())
@@ -1158,14 +1171,6 @@ DEF_TRAVERSE_DECL(ClassScopeFunctionSpecializationDecl, {
 
 DEF_TRAVERSE_DECL(LinkageSpecDecl, { })
 
-DEF_TRAVERSE_DECL(ObjCClassDecl, {
-    // FIXME: implement this
-  })
-
-DEF_TRAVERSE_DECL(ObjCForwardProtocolDecl, {
-    // FIXME: implement this
-  })
-
 DEF_TRAVERSE_DECL(ObjCPropertyImplDecl, {
     // FIXME: implement this
   })
@@ -1194,8 +1199,8 @@ DEF_TRAVERSE_DECL(NamespaceAliasDecl, {
 DEF_TRAVERSE_DECL(LabelDecl, {
   // There is no code in a LabelDecl.
 })
-  
-  
+
+
 DEF_TRAVERSE_DECL(NamespaceDecl, {
     // Code in an unnamed namespace shows up automatically in
     // decls_begin()/decls_end().  Thus we don't need to recurse on
@@ -1343,7 +1348,8 @@ template<typename Derived>
 bool RecursiveASTVisitor<Derived>::TraverseFunctionInstantiations(
   FunctionTemplateDecl* D) {
   FunctionTemplateDecl::spec_iterator end = D->spec_end();
-  for (FunctionTemplateDecl::spec_iterator it = D->spec_begin(); it != end; ++it) {
+  for (FunctionTemplateDecl::spec_iterator it = D->spec_begin(); it != end;
+       ++it) {
     FunctionDecl* FD = *it;
     switch (FD->getTemplateSpecializationKind()) {
     case TSK_ImplicitInstantiation:
@@ -1360,8 +1366,6 @@ bool RecursiveASTVisitor<Derived>::TraverseFunctionInstantiations(
     case TSK_Undeclared:           // Declaration of the template definition.
     case TSK_ExplicitSpecialization:
       break;
-    default:
-      llvm_unreachable("Unknown specialization kind.");
     }
   }
 
@@ -1561,6 +1565,8 @@ DEF_TRAVERSE_DECL(FieldDecl, {
     TRY_TO(TraverseDeclaratorHelper(D));
     if (D->isBitField())
       TRY_TO(TraverseStmt(D->getBitWidth()));
+    else if (D->hasInClassInitializer())
+      TRY_TO(TraverseStmt(D->getInClassInitializer()));
   })
 
 DEF_TRAVERSE_DECL(ObjCAtDefsFieldDecl, {
@@ -1657,7 +1663,9 @@ DEF_TRAVERSE_DECL(CXXDestructorDecl, {
 template<typename Derived>
 bool RecursiveASTVisitor<Derived>::TraverseVarHelper(VarDecl *D) {
   TRY_TO(TraverseDeclaratorHelper(D));
-  TRY_TO(TraverseStmt(D->getInit()));
+  // Default params are taken care of when we traverse the ParmVarDecl.
+  if (!isa<ParmVarDecl>(D))
+    TRY_TO(TraverseStmt(D->getInit()));
   return true;
 }
 
@@ -1768,7 +1776,7 @@ DEF_TRAVERSE_STMT(ObjCAtTryStmt, { })
 DEF_TRAVERSE_STMT(ObjCForCollectionStmt, { })
 DEF_TRAVERSE_STMT(ObjCAutoreleasePoolStmt, { })
 DEF_TRAVERSE_STMT(CXXForRangeStmt, { })
-DEF_TRAVERSE_STMT(MSDependentExistsStmt, { 
+DEF_TRAVERSE_STMT(MSDependentExistsStmt, {
     TRY_TO(TraverseNestedNameSpecifierLoc(S->getQualifierLoc()));
     TRY_TO(TraverseDeclarationNameInfo(S->getNameInfo()));
 })
@@ -1872,6 +1880,23 @@ TraverseGenericSelectionExpr(GenericSelectionExpr *S) {
   return true;
 }
 
+// PseudoObjectExpr is a special case because of the wierdness with
+// syntactic expressions and opaque values.
+template<typename Derived>
+bool RecursiveASTVisitor<Derived>::
+TraversePseudoObjectExpr(PseudoObjectExpr *S) {
+  TRY_TO(WalkUpFromPseudoObjectExpr(S));
+  TRY_TO(TraverseStmt(S->getSyntacticForm()));
+  for (PseudoObjectExpr::semantics_iterator
+         i = S->semantics_begin(), e = S->semantics_end(); i != e; ++i) {
+    Expr *sub = *i;
+    if (OpaqueValueExpr *OVE = dyn_cast<OpaqueValueExpr>(sub))
+      sub = OVE->getSourceExpr();
+    TRY_TO(TraverseStmt(sub));
+  }
+  return true;
+}
+
 DEF_TRAVERSE_STMT(CXXScalarValueInitExpr, {
     // This is called for code like 'return T()' where T is a built-in
     // (i.e. non-class) type.
@@ -1921,6 +1946,11 @@ DEF_TRAVERSE_STMT(BinaryTypeTraitExpr, {
     TRY_TO(TraverseTypeLoc(S->getRhsTypeSourceInfo()->getTypeLoc()));
   })
 
+DEF_TRAVERSE_STMT(TypeTraitExpr, {
+  for (unsigned I = 0, N = S->getNumArgs(); I != N; ++I)
+    TRY_TO(TraverseTypeLoc(S->getArg(I)->getTypeLoc()));
+})
+
 DEF_TRAVERSE_STMT(ArrayTypeTraitExpr, {
     TRY_TO(TraverseTypeLoc(S->getQueriedTypeSourceInfo()->getTypeLoc()));
   })
@@ -1939,6 +1969,37 @@ DEF_TRAVERSE_STMT(CXXTemporaryObjectExpr, {
     TRY_TO(TraverseTypeLoc(S->getTypeSourceInfo()->getTypeLoc()));
   })
 
+// Walk only the visible parts of lambda expressions.  
+template<typename Derived>
+bool RecursiveASTVisitor<Derived>::TraverseLambdaExpr(LambdaExpr *S) {
+  for (LambdaExpr::capture_iterator C = S->explicit_capture_begin(),
+                                 CEnd = S->explicit_capture_end();
+       C != CEnd; ++C) {
+    TRY_TO(TraverseLambdaCapture(*C));
+  }
+
+  if (S->hasExplicitParameters() || S->hasExplicitResultType()) {
+    TypeLoc TL = S->getCallOperator()->getTypeSourceInfo()->getTypeLoc();
+    if (S->hasExplicitParameters() && S->hasExplicitResultType()) {
+      // Visit the whole type.
+      TRY_TO(TraverseTypeLoc(TL));
+    } else if (isa<FunctionProtoTypeLoc>(TL)) {
+      FunctionProtoTypeLoc Proto = cast<FunctionProtoTypeLoc>(TL);
+      if (S->hasExplicitParameters()) {
+        // Visit parameters.
+        for (unsigned I = 0, N = Proto.getNumArgs(); I != N; ++I) {
+          TRY_TO(TraverseDecl(Proto.getArg(I)));
+        }
+      } else {
+        TRY_TO(TraverseTypeLoc(Proto.getResultLoc()));
+      }        
+    }
+  }
+
+  TRY_TO(TraverseStmt(S->getBody()));
+  return true;
+}
+
 DEF_TRAVERSE_STMT(CXXUnresolvedConstructExpr, {
     // This is called for code like 'T()', where T is a template argument.
     TRY_TO(TraverseTypeLoc(S->getTypeSourceInfo()->getTypeLoc()));
@@ -1954,7 +2015,6 @@ DEF_TRAVERSE_STMT(CXXMemberCallExpr, { })
 // over the children.
 DEF_TRAVERSE_STMT(AddrLabelExpr, { })
 DEF_TRAVERSE_STMT(ArraySubscriptExpr, { })
-DEF_TRAVERSE_STMT(BlockDeclRefExpr, { })
 DEF_TRAVERSE_STMT(BlockExpr, {
   TRY_TO(TraverseDecl(S->getBlockDecl()));
   return true; // no child statements to loop through.
@@ -1967,7 +2027,7 @@ DEF_TRAVERSE_STMT(CXXDefaultArgExpr, { })
 DEF_TRAVERSE_STMT(CXXDeleteExpr, { })
 DEF_TRAVERSE_STMT(ExprWithCleanups, { })
 DEF_TRAVERSE_STMT(CXXNullPtrLiteralExpr, { })
-DEF_TRAVERSE_STMT(CXXPseudoDestructorExpr, { 
+DEF_TRAVERSE_STMT(CXXPseudoDestructorExpr, {
   TRY_TO(TraverseNestedNameSpecifierLoc(S->getQualifierLoc()));
   if (TypeSourceInfo *ScopeInfo = S->getScopeTypeInfo())
     TRY_TO(TraverseTypeLoc(ScopeInfo->getTypeLoc()));
@@ -1976,15 +2036,18 @@ DEF_TRAVERSE_STMT(CXXPseudoDestructorExpr, {
 })
 DEF_TRAVERSE_STMT(CXXThisExpr, { })
 DEF_TRAVERSE_STMT(CXXThrowExpr, { })
+DEF_TRAVERSE_STMT(UserDefinedLiteral, { })
 DEF_TRAVERSE_STMT(DesignatedInitExpr, { })
 DEF_TRAVERSE_STMT(ExtVectorElementExpr, { })
 DEF_TRAVERSE_STMT(GNUNullExpr, { })
 DEF_TRAVERSE_STMT(ImplicitValueInitExpr, { })
+DEF_TRAVERSE_STMT(ObjCBoolLiteralExpr, { })
 DEF_TRAVERSE_STMT(ObjCEncodeExpr, { })
 DEF_TRAVERSE_STMT(ObjCIsaExpr, { })
 DEF_TRAVERSE_STMT(ObjCIvarRefExpr, { })
 DEF_TRAVERSE_STMT(ObjCMessageExpr, { })
 DEF_TRAVERSE_STMT(ObjCPropertyRefExpr, { })
+DEF_TRAVERSE_STMT(ObjCSubscriptRefExpr, { })
 DEF_TRAVERSE_STMT(ObjCProtocolExpr, { })
 DEF_TRAVERSE_STMT(ObjCSelectorExpr, { })
 DEF_TRAVERSE_STMT(ObjCIndirectCopyRestoreExpr, { })
@@ -1999,15 +2062,15 @@ DEF_TRAVERSE_STMT(StmtExpr, { })
 DEF_TRAVERSE_STMT(UnresolvedLookupExpr, {
   TRY_TO(TraverseNestedNameSpecifierLoc(S->getQualifierLoc()));
   if (S->hasExplicitTemplateArgs()) {
-    TRY_TO(TraverseTemplateArgumentLocsHelper(S->getTemplateArgs(), 
+    TRY_TO(TraverseTemplateArgumentLocsHelper(S->getTemplateArgs(),
                                               S->getNumTemplateArgs()));
   }
 })
-  
+
 DEF_TRAVERSE_STMT(UnresolvedMemberExpr, {
   TRY_TO(TraverseNestedNameSpecifierLoc(S->getQualifierLoc()));
   if (S->hasExplicitTemplateArgs()) {
-    TRY_TO(TraverseTemplateArgumentLocsHelper(S->getTemplateArgs(), 
+    TRY_TO(TraverseTemplateArgumentLocsHelper(S->getTemplateArgs(),
                                               S->getNumTemplateArgs()));
   }
 })
@@ -2042,6 +2105,9 @@ DEF_TRAVERSE_STMT(FloatingLiteral, { })
 DEF_TRAVERSE_STMT(ImaginaryLiteral, { })
 DEF_TRAVERSE_STMT(StringLiteral, { })
 DEF_TRAVERSE_STMT(ObjCStringLiteral, { })
+DEF_TRAVERSE_STMT(ObjCNumericLiteral, { })
+DEF_TRAVERSE_STMT(ObjCArrayLiteral, { })
+DEF_TRAVERSE_STMT(ObjCDictionaryLiteral, { })
   
 // Traverse OpenCL: AsType, Convert.
 DEF_TRAVERSE_STMT(AsTypeExpr, { })

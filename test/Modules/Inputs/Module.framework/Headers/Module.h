@@ -1,3 +1,5 @@
+// expected-warning{{umbrella header}}
+
 #ifndef MODULE_H
 #define MODULE_H
 const char *getModuleVersion(void);
@@ -12,6 +14,9 @@ const char *getModuleVersion(void);
 @end
 
 #define MODULE_H_MACRO 1
-#__private_macro__ MODULE_H_MACRO
+#__private_macro MODULE_H_MACRO
+
+#include <Module/Sub.h>
+#include <Module/Buried/Treasure.h>
 
 #endif // MODULE_H

@@ -23,6 +23,7 @@
 #include "llvm/ADT/ImmutableList.h"
 #include "llvm/ADT/ImmutableSet.h"
 #include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/DenseSet.h"
 #include <list>
 
 namespace clang {
@@ -50,8 +51,9 @@ class BugType;
 /// This class provides an interface through which checkers can create
 /// individual bug reports.
 class BugReport {
-public:
+public:  
   class NodeResolver {
+    virtual void anchor();
   public:
     virtual ~NodeResolver() {}
     virtual const ExplodedNode*
@@ -70,9 +72,23 @@ protected:
   std::string ShortDescription;
   std::string Description;
   PathDiagnosticLocation Location;
+  PathDiagnosticLocation UniqueingLocation;
   const ExplodedNode *ErrorNode;
   SmallVector<SourceRange, 4> Ranges;
   ExtraTextList ExtraText;
+  
+  typedef llvm::DenseSet<SymbolRef> Symbols;
+  typedef llvm::DenseSet<const MemRegion *> Regions;
+
+  /// A set of symbols that are registered with this report as being
+  /// "interesting", and thus used to help decide which diagnostics
+  /// to include when constructing the final path diagnostic.
+  Symbols interestingSymbols;
+
+  /// A set of regions that are registered with this report as being
+  /// "interesting", and thus used to help decide which diagnostics
+  /// to include when constructing the final path diagnostic.
+  Regions interestingRegions;
 
   // Not the most efficient data structure, but we use an ImmutableList for the
   // Callbacks because it is safe to make additions to list during iteration.
@@ -94,6 +110,18 @@ public:
     : BT(bt), Description(desc), Location(l), ErrorNode(0),
       Callbacks(F.getEmptyList()) {}
 
+  /// \brief Create a BugReport with a custom uniqueing location.
+  ///
+  /// The reports that have the same report location, description, bug type, and
+  /// ranges are uniqued - only one of the equivalent reports will be presented
+  /// to the user. This method allows to rest the location which should be used
+  /// for uniquing reports. For example, memory leaks checker, could set this to
+  /// the allocation site, rather then the location where the bug is reported.
+  BugReport(BugType& bt, StringRef desc, const ExplodedNode *errornode,
+            PathDiagnosticLocation LocationToUnique)
+    : BT(bt), Description(desc), UniqueingLocation(LocationToUnique),
+      ErrorNode(errornode), Callbacks(F.getEmptyList()) {}
+
   virtual ~BugReport();
 
   const BugType& getBugType() const { return BT; }
@@ -107,6 +135,14 @@ public:
     return ShortDescription.empty() ? Description : ShortDescription;
   }
 
+  void markInteresting(SymbolRef sym);
+  void markInteresting(const MemRegion *R);
+  void markInteresting(SVal V);
+  
+  bool isInteresting(SymbolRef sym) const;
+  bool isInteresting(const MemRegion *R) const;
+  bool isInteresting(SVal V) const;
+  
   /// \brief This allows for addition of meta data to the diagnostic.
   ///
   /// Currently, only the HTMLDiagnosticClient knows how to display it. 
@@ -337,7 +373,6 @@ private:
 // FIXME: Get rid of GRBugReporter.  It's the wrong abstraction.
 class GRBugReporter : public BugReporter {
   ExprEngine& Eng;
-  llvm::SmallSet<SymbolRef, 10> NotableSymbols;
 public:
   GRBugReporter(BugReporterData& d, ExprEngine& eng)
     : BugReporter(d, GRBugReporterKind), Eng(eng) {}
@@ -359,14 +394,6 @@ public:
   virtual void GeneratePathDiagnostic(PathDiagnostic &pathDiagnostic,
                      SmallVectorImpl<BugReport*> &bugReports);
 
-  void addNotableSymbol(SymbolRef Sym) {
-    NotableSymbols.insert(Sym);
-  }
-
-  bool isNotable(SymbolRef Sym) const {
-    return (bool) NotableSymbols.count(Sym);
-  }
-
   /// classof - Used by isa<>, cast<>, and dyn_cast<>.
   static bool classof(const BugReporter* R) {
     return R->getKind() == GRBugReporterKind;
@@ -374,6 +401,7 @@ public:
 };
 
 class BugReporterContext {
+  virtual void anchor();
   GRBugReporter &BR;
 public:
   BugReporterContext(GRBugReporter& br) : BR(br) {}
@@ -383,16 +411,6 @@ public:
   GRBugReporter& getBugReporter() { return BR; }
 
   ExplodedGraph &getGraph() { return BR.getGraph(); }
-
-  void addNotableSymbol(SymbolRef Sym) {
-    // FIXME: For now forward to GRBugReporter.
-    BR.addNotableSymbol(Sym);
-  }
-
-  bool isNotable(SymbolRef Sym) const {
-    // FIXME: For now forward to GRBugReporter.
-    return BR.isNotable(Sym);
-  }
 
   ProgramStateManager& getStateManager() {
     return BR.getStateManager();

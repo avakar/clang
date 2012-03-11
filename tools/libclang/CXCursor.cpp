@@ -46,6 +46,7 @@ static CXCursorKind GetCursorKind(const Attr *A) {
     case attr::Final: return CXCursor_CXXFinalAttr;
     case attr::Override: return CXCursor_CXXOverrideAttr;
     case attr::Annotate: return CXCursor_AnnotateAttr;
+    case attr::AsmLabel: return CXCursor_AsmLabelAttr;
   }
 
   return CXCursor_UnexposedAttr;
@@ -205,6 +206,7 @@ CXCursor cxcursor::MakeCXCursor(Stmt *S, Decl *Parent, CXTranslationUnit TU,
   case Stmt::AtomicExprClass:
   case Stmt::BinaryConditionalOperatorClass:
   case Stmt::BinaryTypeTraitExprClass:
+  case Stmt::TypeTraitExprClass:
   case Stmt::CXXBindTemporaryExprClass:
   case Stmt::CXXDefaultArgExprClass:
   case Stmt::CXXScalarValueInitExprClass:
@@ -219,15 +221,28 @@ CXCursor cxcursor::MakeCXCursor(Stmt *S, Decl *Parent, CXTranslationUnit TU,
   case Stmt::MaterializeTemporaryExprClass:
   case Stmt::ObjCIndirectCopyRestoreExprClass:
   case Stmt::OffsetOfExprClass:
-  case Stmt::OpaqueValueExprClass:
   case Stmt::ParenListExprClass:
   case Stmt::PredefinedExprClass:
   case Stmt::ShuffleVectorExprClass:
   case Stmt::UnaryExprOrTypeTraitExprClass:
   case Stmt::UnaryTypeTraitExprClass:
   case Stmt::VAArgExprClass:
+  case Stmt::ObjCArrayLiteralClass:
+  case Stmt::ObjCDictionaryLiteralClass:
+  case Stmt::ObjCNumericLiteralClass:
+  case Stmt::ObjCSubscriptRefExprClass:
     K = CXCursor_UnexposedExpr;
     break;
+
+  case Stmt::OpaqueValueExprClass:
+    if (Expr *Src = cast<OpaqueValueExpr>(S)->getSourceExpr())
+      return MakeCXCursor(Src, Parent, TU, RegionOfInterest);
+    K = CXCursor_UnexposedExpr;
+    break;
+
+  case Stmt::PseudoObjectExprClass:
+    return MakeCXCursor(cast<PseudoObjectExpr>(S)->getSyntacticForm(),
+                        Parent, TU, RegionOfInterest);
 
   case Stmt::CompoundStmtClass:
     K = CXCursor_CompoundStmt;
@@ -384,7 +399,11 @@ CXCursor cxcursor::MakeCXCursor(Stmt *S, Decl *Parent, CXTranslationUnit TU,
   case Stmt::ObjCProtocolExprClass:
     K = CXCursor_ObjCProtocolExpr;
     break;
-
+      
+  case Stmt::ObjCBoolLiteralExprClass:
+    K = CXCursor_ObjCBoolLiteralExpr;
+    break;
+      
   case Stmt::ObjCBridgedCastExprClass:
     K = CXCursor_ObjCBridgedCastExpr;
     break;
@@ -401,7 +420,6 @@ CXCursor cxcursor::MakeCXCursor(Stmt *S, Decl *Parent, CXTranslationUnit TU,
     K = CXCursor_SizeOfPackExpr;
     break;
 
-  case Stmt::BlockDeclRefExprClass:
   case Stmt::DeclRefExprClass:           
   case Stmt::DependentScopeDeclRefExprClass:
   case Stmt::SubstNonTypeTemplateParmExprClass:
@@ -427,7 +445,12 @@ CXCursor cxcursor::MakeCXCursor(Stmt *S, Decl *Parent, CXTranslationUnit TU,
   case Stmt::CXXConstructExprClass:  
   case Stmt::CXXTemporaryObjectExprClass:
   case Stmt::CXXUnresolvedConstructExprClass:
+  case Stmt::UserDefinedLiteralClass:
     K = CXCursor_CallExpr;
+    break;
+      
+  case Stmt::LambdaExprClass:
+    K = CXCursor_LambdaExpr;
     break;
       
   case Stmt::ObjCMessageExprClass: {
@@ -526,12 +549,12 @@ cxcursor::getCursorTypeRef(CXCursor C) {
                                       reinterpret_cast<uintptr_t>(C.data[1])));
 }
 
-CXCursor cxcursor::MakeCursorTemplateRef(TemplateDecl *Template, 
+CXCursor cxcursor::MakeCursorTemplateRef(const TemplateDecl *Template, 
                                          SourceLocation Loc,
                                          CXTranslationUnit TU) {
   assert(Template && TU && "Invalid arguments!");
   void *RawLoc = reinterpret_cast<void *>(Loc.getRawEncoding());
-  CXCursor C = { CXCursor_TemplateRef, 0, { Template, RawLoc, TU } };
+  CXCursor C = { CXCursor_TemplateRef, 0, { (void*)Template, RawLoc, TU } };
   return C;    
 }
 
@@ -543,13 +566,14 @@ cxcursor::getCursorTemplateRef(CXCursor C) {
                                        reinterpret_cast<uintptr_t>(C.data[1])));  
 }
 
-CXCursor cxcursor::MakeCursorNamespaceRef(NamedDecl *NS, SourceLocation Loc, 
+CXCursor cxcursor::MakeCursorNamespaceRef(const NamedDecl *NS,
+                                          SourceLocation Loc, 
                                           CXTranslationUnit TU) {
   
   assert(NS && (isa<NamespaceDecl>(NS) || isa<NamespaceAliasDecl>(NS)) && TU &&
          "Invalid arguments!");
   void *RawLoc = reinterpret_cast<void *>(Loc.getRawEncoding());
-  CXCursor C = { CXCursor_NamespaceRef, 0, { NS, RawLoc, TU } };
+  CXCursor C = { CXCursor_NamespaceRef, 0, { (void*)NS, RawLoc, TU } };
   return C;    
 }
 
@@ -561,12 +585,29 @@ cxcursor::getCursorNamespaceRef(CXCursor C) {
                                        reinterpret_cast<uintptr_t>(C.data[1])));  
 }
 
-CXCursor cxcursor::MakeCursorMemberRef(FieldDecl *Field, SourceLocation Loc, 
+CXCursor cxcursor::MakeCursorVariableRef(const VarDecl *Var, SourceLocation Loc, 
+                                         CXTranslationUnit TU) {
+  
+  assert(Var && TU && "Invalid arguments!");
+  void *RawLoc = reinterpret_cast<void *>(Loc.getRawEncoding());
+  CXCursor C = { CXCursor_VariableRef, 0, { (void*)Var, RawLoc, TU } };
+  return C;
+}
+
+std::pair<VarDecl *, SourceLocation> 
+cxcursor::getCursorVariableRef(CXCursor C) {
+  assert(C.kind == CXCursor_VariableRef);
+  return std::make_pair(static_cast<VarDecl *>(C.data[0]),
+                        SourceLocation::getFromRawEncoding(
+                          reinterpret_cast<uintptr_t>(C.data[1])));
+}
+
+CXCursor cxcursor::MakeCursorMemberRef(const FieldDecl *Field, SourceLocation Loc, 
                                        CXTranslationUnit TU) {
   
   assert(Field && TU && "Invalid arguments!");
   void *RawLoc = reinterpret_cast<void *>(Loc.getRawEncoding());
-  CXCursor C = { CXCursor_MemberRef, 0, { Field, RawLoc, TU } };
+  CXCursor C = { CXCursor_MemberRef, 0, { (void*)Field, RawLoc, TU } };
   return C;    
 }
 
@@ -578,9 +619,9 @@ cxcursor::getCursorMemberRef(CXCursor C) {
                                        reinterpret_cast<uintptr_t>(C.data[1])));  
 }
 
-CXCursor cxcursor::MakeCursorCXXBaseSpecifier(CXXBaseSpecifier *B,
+CXCursor cxcursor::MakeCursorCXXBaseSpecifier(const CXXBaseSpecifier *B,
                                               CXTranslationUnit TU){
-  CXCursor C = { CXCursor_CXXBaseSpecifier, 0, { B, 0, TU } };
+  CXCursor C = { CXCursor_CXXBaseSpecifier, 0, { (void*)B, 0, TU } };
   return C;  
 }
 
@@ -735,8 +776,10 @@ ASTContext &cxcursor::getCursorContext(CXCursor Cursor) {
 }
 
 ASTUnit *cxcursor::getCursorASTUnit(CXCursor Cursor) {
-  return static_cast<ASTUnit *>(static_cast<CXTranslationUnit>(Cursor.data[2])
-                                  ->TUData);
+  CXTranslationUnit TU = static_cast<CXTranslationUnit>(Cursor.data[2]);
+  if (!TU)
+    return 0;
+  return static_cast<ASTUnit *>(TU->TUData);
 }
 
 CXTranslationUnit cxcursor::getCursorTU(CXCursor Cursor) {
@@ -750,15 +793,20 @@ static void CollectOverriddenMethods(CXTranslationUnit TU,
   if (!Ctx)
     return;
 
-  // If we have a class or category implementation, jump straight to the 
-  // interface.
-  if (ObjCImplDecl *Impl = dyn_cast<ObjCImplDecl>(Ctx))
-    return CollectOverriddenMethods(TU, Impl->getClassInterface(),
-                                    Method, Methods);
-  
   ObjCContainerDecl *Container = dyn_cast<ObjCContainerDecl>(Ctx);
   if (!Container)
     return;
+
+  // In categories look for overriden methods from protocols. A method from
+  // category is not "overriden" since it is considered as the "same" method
+  // (same USR) as the one from the interface.
+  if (ObjCCategoryDecl *Category = dyn_cast<ObjCCategoryDecl>(Container)) {
+    for (ObjCCategoryDecl::protocol_iterator P = Category->protocol_begin(),
+                                          PEnd = Category->protocol_end();
+         P != PEnd; ++P)
+      CollectOverriddenMethods(TU, *P, Method, Methods);
+    return;
+  }
 
   // Check whether we have a matching method at this level.
   if (ObjCMethodDecl *Overridden = Container->getMethod(Method->getSelector(),
@@ -777,13 +825,6 @@ static void CollectOverriddenMethods(CXTranslationUnit TU,
       CollectOverriddenMethods(TU, *P, Method, Methods);
   }
 
-  if (ObjCCategoryDecl *Category = dyn_cast<ObjCCategoryDecl>(Container)) {
-    for (ObjCCategoryDecl::protocol_iterator P = Category->protocol_begin(),
-                                          PEnd = Category->protocol_end();
-         P != PEnd; ++P)
-      CollectOverriddenMethods(TU, *P, Method, Methods);
-  }
-
   if (ObjCInterfaceDecl *Interface = dyn_cast<ObjCInterfaceDecl>(Container)) {
     for (ObjCInterfaceDecl::protocol_iterator P = Interface->protocol_begin(),
                                            PEnd = Interface->protocol_end();
@@ -794,10 +835,8 @@ static void CollectOverriddenMethods(CXTranslationUnit TU,
          Category; Category = Category->getNextClassCategory())
       CollectOverriddenMethods(TU, Category, Method, Methods);
 
-    // We only look into the superclass if we haven't found anything yet.
-    if (Methods.empty())
-      if (ObjCInterfaceDecl *Super = Interface->getSuperClass())
-        return CollectOverriddenMethods(TU, Super, Method, Methods);
+    if (ObjCInterfaceDecl *Super = Interface->getSuperClass())
+      return CollectOverriddenMethods(TU, Super, Method, Methods);
   }
 }
 
@@ -825,8 +864,37 @@ void cxcursor::getOverriddenCursors(CXCursor cursor,
   if (!Method)
     return;
 
-  // Handle Objective-C methods.
-  CollectOverriddenMethods(TU, Method->getDeclContext(), Method, overridden);
+  if (ObjCProtocolDecl *
+        ProtD = dyn_cast<ObjCProtocolDecl>(Method->getDeclContext())) {
+    CollectOverriddenMethods(TU, ProtD, Method, overridden);
+
+  } else if (ObjCImplDecl *
+               IMD = dyn_cast<ObjCImplDecl>(Method->getDeclContext())) {
+    ObjCInterfaceDecl *ID = IMD->getClassInterface();
+    if (!ID)
+      return;
+    // Start searching for overridden methods using the method from the
+    // interface as starting point.
+    if (ObjCMethodDecl *IFaceMeth = ID->getMethod(Method->getSelector(),
+                                                  Method->isInstanceMethod()))
+      Method = IFaceMeth;
+    CollectOverriddenMethods(TU, ID, Method, overridden);
+
+  } else if (ObjCCategoryDecl *
+               CatD = dyn_cast<ObjCCategoryDecl>(Method->getDeclContext())) {
+    ObjCInterfaceDecl *ID = CatD->getClassInterface();
+    if (!ID)
+      return;
+    // Start searching for overridden methods using the method from the
+    // interface as starting point.
+    if (ObjCMethodDecl *IFaceMeth = ID->getMethod(Method->getSelector(),
+                                                  Method->isInstanceMethod()))
+      Method = IFaceMeth;
+    CollectOverriddenMethods(TU, ID, Method, overridden);
+
+  } else {
+    CollectOverriddenMethods(TU, Method->getDeclContext(), Method, overridden);
+  }
 }
 
 std::pair<int, SourceLocation>
@@ -1006,33 +1074,30 @@ CXCompletionString clang_getCursorCompletionString(CXCursor cursor) {
   enum CXCursorKind kind = clang_getCursorKind(cursor);
   if (clang_isDeclaration(kind)) {
     Decl *decl = getCursorDecl(cursor);
-    if (isa<NamedDecl>(decl)) {
-      NamedDecl *namedDecl = (NamedDecl *)decl;
+    if (NamedDecl *namedDecl = dyn_cast_or_null<NamedDecl>(decl)) {
       ASTUnit *unit = getCursorASTUnit(cursor);
-      if (unit->hasSema()) {
-        Sema &S = unit->getSema();
-        CodeCompletionAllocator *Allocator 
-          = unit->getCursorCompletionAllocator().getPtr();
-        CodeCompletionResult Result(namedDecl);
-        CodeCompletionString *String 
-          = Result.CreateCodeCompletionString(S, *Allocator);
-        return String;
-      }
+      CodeCompletionAllocator *Allocator
+        = unit->getCursorCompletionAllocator().getPtr();
+      CodeCompletionResult Result(namedDecl);
+      CodeCompletionString *String
+        = Result.CreateCodeCompletionString(unit->getASTContext(),
+                                            unit->getPreprocessor(),
+                                            *Allocator);
+      return String;
     }
   }
   else if (kind == CXCursor_MacroDefinition) {
     MacroDefinition *definition = getCursorMacroDefinition(cursor);
     const IdentifierInfo *MacroInfo = definition->getName();
     ASTUnit *unit = getCursorASTUnit(cursor);
-    if (unit->hasSema()) {
-      Sema &S = unit->getSema();
-      CodeCompletionAllocator *Allocator
-        = unit->getCursorCompletionAllocator().getPtr();
-      CodeCompletionResult Result(const_cast<IdentifierInfo *>(MacroInfo));
-      CodeCompletionString *String 
-        = Result.CreateCodeCompletionString(S, *Allocator);
-      return String;
-    }
+    CodeCompletionAllocator *Allocator
+      = unit->getCursorCompletionAllocator().getPtr();
+    CodeCompletionResult Result(const_cast<IdentifierInfo *>(MacroInfo));
+    CodeCompletionString *String
+      = Result.CreateCodeCompletionString(unit->getASTContext(),
+                                          unit->getPreprocessor(),
+                                          *Allocator);
+    return String;
   }
   return NULL;
 }

@@ -8,6 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/CodeGen/CodeGenAction.h"
+#include "clang/Basic/FileManager.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/AST/ASTConsumer.h"
@@ -18,9 +19,11 @@
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
 #include "llvm/LLVMContext.h"
+#include "llvm/Linker.h"
 #include "llvm/Module.h"
 #include "llvm/Pass.h"
 #include "llvm/ADT/OwningPtr.h"
+#include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/Support/IRReader.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/SourceMgr.h"
@@ -30,6 +33,7 @@ using namespace llvm;
 
 namespace clang {
   class BackendConsumer : public ASTConsumer {
+    virtual void anchor();
     DiagnosticsEngine &Diags;
     BackendAction Action;
     const CodeGenOptions &CodeGenOpts;
@@ -40,9 +44,9 @@ namespace clang {
 
     Timer LLVMIRGeneration;
 
-    llvm::OwningPtr<CodeGenerator> Gen;
+    OwningPtr<CodeGenerator> Gen;
 
-    llvm::OwningPtr<llvm::Module> TheModule;
+    OwningPtr<llvm::Module> TheModule, LinkModule;
 
   public:
     BackendConsumer(BackendAction action, DiagnosticsEngine &_Diags,
@@ -50,7 +54,9 @@ namespace clang {
                     const TargetOptions &targetopts,
                     const LangOptions &langopts,
                     bool TimePasses,
-                    const std::string &infile, raw_ostream *OS,
+                    const std::string &infile,
+                    llvm::Module *LinkModule,
+                    raw_ostream *OS,
                     LLVMContext &C) :
       Diags(_Diags),
       Action(action),
@@ -59,11 +65,17 @@ namespace clang {
       LangOpts(langopts),
       AsmOutStream(OS),
       LLVMIRGeneration("LLVM IR Generation Time"),
-      Gen(CreateLLVMCodeGen(Diags, infile, compopts, C)) {
+      Gen(CreateLLVMCodeGen(Diags, infile, compopts, C)),
+      LinkModule(LinkModule) {
       llvm::TimePassesIsEnabled = TimePasses;
     }
 
     llvm::Module *takeModule() { return TheModule.take(); }
+    llvm::Module *takeLinkModule() { return LinkModule.take(); }
+
+    virtual void HandleCXXStaticMemberVarInstantiation(VarDecl *VD) {
+      Gen->HandleCXXStaticMemberVarInstantiation(VD);
+    }
 
     virtual void Initialize(ASTContext &Ctx) {
       Context = &Ctx;
@@ -79,7 +91,7 @@ namespace clang {
         LLVMIRGeneration.stopTimer();
     }
 
-    virtual void HandleTopLevelDecl(DeclGroupRef D) {
+    virtual bool HandleTopLevelDecl(DeclGroupRef D) {
       PrettyStackTraceDecl CrashInfo(*D.begin(), SourceLocation(),
                                      Context->getSourceManager(),
                                      "LLVM IR generation of declaration");
@@ -91,6 +103,8 @@ namespace clang {
 
       if (llvm::TimePassesIsEnabled)
         LLVMIRGeneration.stopTimer();
+
+      return true;
     }
 
     virtual void HandleTranslationUnit(ASTContext &C) {
@@ -111,7 +125,7 @@ namespace clang {
 
       // Make sure IR generation is happy with the module. This is released by
       // the module provider.
-      Module *M = Gen->ReleaseModule();
+      llvm::Module *M = Gen->ReleaseModule();
       if (!M) {
         // The module has been released by IR gen on failures, do not double
         // free.
@@ -121,6 +135,17 @@ namespace clang {
 
       assert(TheModule.get() == M &&
              "Unexpected module change during IR generation");
+
+      // Link LinkModule into this module if present, preserving its validity.
+      if (LinkModule) {
+        std::string ErrorMsg;
+        if (Linker::LinkModules(M, LinkModule.get(), Linker::PreserveSource,
+                                &ErrorMsg)) {
+          Diags.Report(diag::err_fe_cannot_link_module)
+            << LinkModule->getModuleIdentifier() << ErrorMsg;
+          return;
+        }
+      }
 
       // Install an inline asm handler so that diagnostics get printed through
       // our diagnostics hooks.
@@ -160,6 +185,8 @@ namespace clang {
     void InlineAsmDiagHandler2(const llvm::SMDiagnostic &,
                                SourceLocation LocCookie);
   };
+  
+  void BackendConsumer::anchor() {}
 }
 
 /// ConvertBackendLocation - Convert a location in a temporary llvm::SourceMgr
@@ -238,7 +265,8 @@ void BackendConsumer::InlineAsmDiagHandler2(const llvm::SMDiagnostic &D,
 //
 
 CodeGenAction::CodeGenAction(unsigned _Act, LLVMContext *_VMContext)
-  : Act(_Act), VMContext(_VMContext ? _VMContext : new LLVMContext),
+  : Act(_Act), LinkModule(0),
+    VMContext(_VMContext ? _VMContext : new LLVMContext),
     OwnsVMContext(!_VMContext) {}
 
 CodeGenAction::~CodeGenAction() {
@@ -253,6 +281,10 @@ void CodeGenAction::EndSourceFileAction() {
   // If the consumer creation failed, do nothing.
   if (!getCompilerInstance().hasASTConsumer())
     return;
+
+  // If we were given a link module, release consumer's ownership of it.
+  if (LinkModule)
+    BEConsumer->takeLinkModule();
 
   // Steal the module from the consumer.
   TheModule.reset(BEConsumer->takeModule());
@@ -290,16 +322,40 @@ static raw_ostream *GetOutputStream(CompilerInstance &CI,
 ASTConsumer *CodeGenAction::CreateASTConsumer(CompilerInstance &CI,
                                               StringRef InFile) {
   BackendAction BA = static_cast<BackendAction>(Act);
-  llvm::OwningPtr<raw_ostream> OS(GetOutputStream(CI, InFile, BA));
+  OwningPtr<raw_ostream> OS(GetOutputStream(CI, InFile, BA));
   if (BA != Backend_EmitNothing && !OS)
     return 0;
+
+  llvm::Module *LinkModuleToUse = LinkModule;
+
+  // If we were not given a link module, and the user requested that one be
+  // loaded from bitcode, do so now.
+  const std::string &LinkBCFile = CI.getCodeGenOpts().LinkBitcodeFile;
+  if (!LinkModuleToUse && !LinkBCFile.empty()) {
+    std::string ErrorStr;
+
+    llvm::MemoryBuffer *BCBuf =
+      CI.getFileManager().getBufferForFile(LinkBCFile, &ErrorStr);
+    if (!BCBuf) {
+      CI.getDiagnostics().Report(diag::err_cannot_open_file)
+        << LinkBCFile << ErrorStr;
+      return 0;
+    }
+
+    LinkModuleToUse = getLazyBitcodeModule(BCBuf, *VMContext, &ErrorStr);
+    if (!LinkModuleToUse) {
+      CI.getDiagnostics().Report(diag::err_cannot_open_file)
+        << LinkBCFile << ErrorStr;
+      return 0;
+    }
+  }
 
   BEConsumer = 
       new BackendConsumer(BA, CI.getDiagnostics(),
                           CI.getCodeGenOpts(), CI.getTargetOpts(),
                           CI.getLangOpts(),
-                          CI.getFrontendOpts().ShowTimers, InFile, OS.take(),
-                          *VMContext);
+                          CI.getFrontendOpts().ShowTimers, InFile,
+                          LinkModuleToUse, OS.take(), *VMContext);
   return BEConsumer;
 }
 
@@ -357,20 +413,26 @@ void CodeGenAction::ExecuteAction() {
 
 //
 
+void EmitAssemblyAction::anchor() { }
 EmitAssemblyAction::EmitAssemblyAction(llvm::LLVMContext *_VMContext)
   : CodeGenAction(Backend_EmitAssembly, _VMContext) {}
 
+void EmitBCAction::anchor() { }
 EmitBCAction::EmitBCAction(llvm::LLVMContext *_VMContext)
   : CodeGenAction(Backend_EmitBC, _VMContext) {}
 
+void EmitLLVMAction::anchor() { }
 EmitLLVMAction::EmitLLVMAction(llvm::LLVMContext *_VMContext)
   : CodeGenAction(Backend_EmitLL, _VMContext) {}
 
+void EmitLLVMOnlyAction::anchor() { }
 EmitLLVMOnlyAction::EmitLLVMOnlyAction(llvm::LLVMContext *_VMContext)
   : CodeGenAction(Backend_EmitNothing, _VMContext) {}
 
+void EmitCodeGenOnlyAction::anchor() { }
 EmitCodeGenOnlyAction::EmitCodeGenOnlyAction(llvm::LLVMContext *_VMContext)
   : CodeGenAction(Backend_EmitMCNull, _VMContext) {}
 
+void EmitObjAction::anchor() { }
 EmitObjAction::EmitObjAction(llvm::LLVMContext *_VMContext)
   : CodeGenAction(Backend_EmitObj, _VMContext) {}

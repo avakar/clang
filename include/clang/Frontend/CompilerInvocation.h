@@ -14,6 +14,7 @@
 #include "clang/Basic/TargetOptions.h"
 #include "clang/Basic/FileSystemOptions.h"
 #include "clang/Frontend/AnalyzerOptions.h"
+#include "clang/Frontend/MigratorOptions.h"
 #include "clang/Frontend/CodeGenOptions.h"
 #include "clang/Frontend/DependencyOutputOptions.h"
 #include "clang/Frontend/DiagnosticOptions.h"
@@ -30,18 +31,34 @@
 
 namespace clang {
 
+class CompilerInvocation;
 class DiagnosticsEngine;
+  
+class CompilerInvocationBase : public RefCountedBase<CompilerInvocation> {
+protected:
+  /// Options controlling the language variant.
+  IntrusiveRefCntPtr<LangOptions> LangOpts;
+public:
+  CompilerInvocationBase();
 
+  CompilerInvocationBase(const CompilerInvocationBase &X);
+  
+  LangOptions *getLangOpts() { return LangOpts.getPtr(); }
+  const LangOptions *getLangOpts() const { return LangOpts.getPtr(); }
+};
+  
 /// CompilerInvocation - Helper class for holding the data necessary to invoke
 /// the compiler.
 ///
 /// This class is designed to represent an abstract "invocation" of the
 /// compiler, including data such as the include paths, the code generation
 /// options, the warning flags, and so on.
-class CompilerInvocation : public llvm::RefCountedBase<CompilerInvocation> {
+class CompilerInvocation : public CompilerInvocationBase {
   /// Options controlling the static analyzer.
   AnalyzerOptions AnalyzerOpts;
 
+  MigratorOptions MigratorOpts;
+  
   /// Options controlling IRgen and the backend.
   CodeGenOptions CodeGenOpts;
 
@@ -60,9 +77,6 @@ class CompilerInvocation : public llvm::RefCountedBase<CompilerInvocation> {
   /// Options controlling the #include directive.
   HeaderSearchOptions HeaderSearchOpts;
 
-  /// Options controlling the language variant.
-  LangOptions LangOpts;
-
   /// Options controlling the preprocessor (aside from #include handling).
   PreprocessorOptions PreprocessorOpts;
 
@@ -79,13 +93,13 @@ public:
   /// @{
 
   /// CreateFromArgs - Create a compiler invocation from a list of input
-  /// options.
+  /// options. Returns true on success.
   ///
   /// \param Res [out] - The resulting invocation.
   /// \param ArgBegin - The first element in the argument vector.
   /// \param ArgEnd - The last element in the argument vector.
   /// \param Diags - The diagnostic engine to use for errors.
-  static void CreateFromArgs(CompilerInvocation &Res,
+  static bool CreateFromArgs(CompilerInvocation &Res,
                              const char* const *ArgBegin,
                              const char* const *ArgEnd,
                              DiagnosticsEngine &Diags);
@@ -111,7 +125,7 @@ public:
   /// \param LangStd - The input language standard.
   void setLangDefaults(InputKind IK,
                   LangStandard::Kind LangStd = LangStandard::lang_unspecified) {
-    setLangDefaults(LangOpts, IK, LangStd);
+    setLangDefaults(*getLangOpts(), IK, LangStd);
   }
 
   /// setLangDefaults - Set language defaults for the given input language and
@@ -136,6 +150,11 @@ public:
     return AnalyzerOpts;
   }
 
+  MigratorOptions &getMigratorOpts() { return MigratorOpts; }
+  const MigratorOptions &getMigratorOpts() const {
+    return MigratorOpts;
+  }
+  
   CodeGenOptions &getCodeGenOpts() { return CodeGenOpts; }
   const CodeGenOptions &getCodeGenOpts() const {
     return CodeGenOpts;
@@ -165,9 +184,6 @@ public:
   const FrontendOptions &getFrontendOpts() const {
     return FrontendOpts;
   }
-
-  LangOptions &getLangOpts() { return LangOpts; }
-  const LangOptions &getLangOpts() const { return LangOpts; }
 
   PreprocessorOptions &getPreprocessorOpts() { return PreprocessorOpts; }
   const PreprocessorOptions &getPreprocessorOpts() const {

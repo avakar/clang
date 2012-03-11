@@ -271,7 +271,7 @@ static Rdar8595462_A * Rdar8595462_staticVar;
 // CHECK: Punctuation: ")" [38:12 - 38:13] ObjCInstanceMethodDecl=actionMethod::38:1 (Definition)
 // CHECK: Identifier: "actionMethod" [38:14 - 38:26] ObjCInstanceMethodDecl=actionMethod::38:1 (Definition)
 // CHECK: Punctuation: ":" [38:26 - 38:27] ObjCInstanceMethodDecl=actionMethod::38:1 (Definition)
-// CHECK: Keyword: "in" [38:28 - 38:30] ObjCInstanceMethodDecl=actionMethod::38:1 (Definition) [Overrides @33:1]
+// CHECK: Keyword: "in" [38:28 - 38:30] ObjCInstanceMethodDecl=actionMethod::38:1 (Definition)
 // CHECK: Identifier: "id" [38:31 - 38:33] TypeRef=id:0:0
 // CHECK: Punctuation: ")" [38:33 - 38:34] ParmDecl=arg:38:34 (Definition)
 // CHECK: Identifier: "arg" [38:34 - 38:37] ParmDecl=arg:38:34 (Definition)
@@ -452,8 +452,8 @@ static Rdar8595462_A * Rdar8595462_staticVar;
 // CHECK: Punctuation: ")" [88:24 - 88:25] ObjCProtocolExpr=Proto:85:1
 // CHECK: Punctuation: ";" [88:25 - 88:26] CompoundStmt=
 // CHECK: Punctuation: "}" [89:1 - 89:2] CompoundStmt=
-// CHECK: Punctuation: "@" [93:1 - 93:2] UnexposedDecl=[93:8]
-// CHECK: Keyword: "class" [93:2 - 93:7] UnexposedDecl=[93:8]
+// CHECK: Punctuation: "@" [93:1 - 93:2] ObjCInterfaceDecl=Rdar8595462_A:93:8
+// CHECK: Keyword: "class" [93:2 - 93:7] ObjCInterfaceDecl=Rdar8595462_A:93:8
 // CHECK: Identifier: "Rdar8595462_A" [93:8 - 93:21] ObjCClassRef=Rdar8595462_A:93:8
 // CHECK: Punctuation: ";" [93:21 - 93:22]
 // CHECK: Punctuation: "@" [94:1 - 94:2] ObjCInterfaceDecl=Rdar8595462_B:94:12
@@ -567,7 +567,7 @@ static Rdar8595462_A * Rdar8595462_staticVar;
 // CHECK-PROP-AFTER-METHOD: Punctuation: ";" [137:39 - 137:40] ObjCInterfaceDecl=Rdar8062781:134:12
 // CHECK-PROP-AFTER-METHOD: Punctuation: "@" [138:1 - 138:2] ObjCInterfaceDecl=Rdar8062781:134:12
 
-// RUN: c-index-test -test-annotate-tokens=%s:141:1:142:1 %s -DIBOutlet='__attribute__((iboutlet))' -DIBAction='void)__attribute__((ibaction)' -ccc-host-triple x86_64-apple-macosx10.7.0 | FileCheck -check-prefix=CHECK-WITH-WEAK %s
+// RUN: c-index-test -test-annotate-tokens=%s:141:1:142:1 %s -DIBOutlet='__attribute__((iboutlet))' -DIBAction='void)__attribute__((ibaction)' -target x86_64-apple-macosx10.7.0 | FileCheck -check-prefix=CHECK-WITH-WEAK %s
 // CHECK-WITH-WEAK: Identifier: "__weak" [141:3 - 141:9] macro expansion
 // CHECK-WITH-WEAK: Identifier: "Foo" [141:10 - 141:13] ObjCClassRef=Foo:1:12
 // CHECK-WITH-WEAK: Punctuation: "*" [141:14 - 141:15] ObjCIvarDecl=foo:141:15 (Definition)

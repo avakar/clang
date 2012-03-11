@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -arcmt-migrate -arcmt-migrate-directory %t.dir -arcmt-migrate-report-output %t.plist %s 
+// RUN: %clang_cc1 -arcmt-migrate -mt-migrate-directory %t.dir -arcmt-migrate-report-output %t.plist %s 
 // RUN: FileCheck %s -input-file=%t.plist
 // RUN: rm -rf %t.dir
 
@@ -48,3 +48,5 @@ void test(id p) {
 // CHECK:  </array>
 // CHECK: </dict>
 // CHECK: </plist>
+
+// DISABLE: mingw32

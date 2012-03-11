@@ -686,7 +686,7 @@ int slf_function_bad_7() __attribute__((shared_lock_function(0))); // \
 // plus an optional list of locks (vars/fields)
 
 void etf_function() __attribute__((exclusive_trylock_function));  // \
-  // expected-error {{attribute takes attribute takes at least 1 argument arguments}}
+  // expected-error {{attribute takes at least 1 argument}}
 
 void etf_function_args() __attribute__((exclusive_trylock_function(1, mu2)));
 
@@ -1252,4 +1252,56 @@ public:
 
   Mu mu;
 };
+
+//-------------------------
+// Empty argument lists
+//-------------------------
+
+class __attribute__((lockable)) EmptyArgListsTest {
+  void lock() __attribute__((exclusive_lock_function())) { }
+  void unlock() __attribute__((unlock_function())) { }
+};
+
+
+namespace FunctionDefinitionParseTest {
+// Test parsing of attributes on function definitions.
+
+class Foo {
+public:
+  Mu mu_;
+  void foo1();
+  void foo2(Foo *f);
+};
+
+template <class T>
+class Bar {
+public:
+  Mu mu_;
+  void bar();
+};
+
+void Foo::foo1()       __attribute__((exclusive_locks_required(mu_))) { }
+void Foo::foo2(Foo *f) __attribute__((exclusive_locks_required(f->mu_))) { }
+
+template <class T>
+void Bar<T>::bar() __attribute__((exclusive_locks_required(mu_))) { }
+
+void baz(Foo *f) __attribute__((exclusive_locks_required(f->mu_))) { }
+
+} // end namespace
+
+
+namespace TestMultiDecl {
+
+class Foo {
+public:
+  int __attribute__((guarded_by(mu_))) a;
+  int __attribute__((guarded_by(mu_))) b, c;
+
+private:
+  Mu mu_;
+};
+
+
+} // end namespace TestMultiDecl
 

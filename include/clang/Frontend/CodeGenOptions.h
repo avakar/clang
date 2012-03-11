@@ -50,6 +50,7 @@ public:
                                   /// internal state before optimizations are
                                   /// done.
   unsigned DisableRedZone    : 1; /// Set when -mno-red-zone is enabled.
+  unsigned DisableTailCalls  : 1; /// Do not emit tail calls.
   unsigned EmitDeclMetadata  : 1; /// Emit special metadata indicating what
                                   /// Decl* various IR entities came from.  Only
                                   /// useful when running CodeGen as a
@@ -105,6 +106,11 @@ public:
   unsigned VerifyModule      : 1; /// Control whether the module should be run
                                   /// through the LLVM Verifier.
 
+  unsigned StackRealignment  : 1; /// Control whether to permit stack
+                                  /// realignment.
+  unsigned StackAlignment;        /// Overrides default stack alignment,
+                                  /// if not 0.
+
   /// The code model to use (-mcmodel).
   std::string CodeModel;
 
@@ -128,6 +134,9 @@ public:
   /// The float precision limit to use, if non-empty.
   std::string LimitFloatPrecision;
 
+  /// The name of the bitcode file to link before optzns.
+  std::string LinkBitcodeFile;
+
   /// The kind of inlining to perform.
   InliningMethod Inlining;
 
@@ -138,6 +147,10 @@ public:
 
   /// The name of the relocation model to use.
   std::string RelocationModel;
+
+  /// If not an empty string, trap intrinsics are lowered to calls to this
+  /// function instead of to trap instructions.
+  std::string TrapFuncName;
 
   /// A list of command-line options to forward to the LLVM backend.
   std::vector<std::string> BackendOptions;
@@ -158,6 +171,7 @@ public:
     DisableFPElim = 0;
     DisableLLVMOpts = 0;
     DisableRedZone = 0;
+    DisableTailCalls = 0;
     EmitDeclMetadata = 0;
     EmitGcovArcs = 0;
     EmitGcovNotes = 0;
@@ -195,6 +209,8 @@ public:
     UnwindTables = 0;
     UseRegisterSizedBitfieldAccess = 0;
     VerifyModule = 1;
+    StackRealignment = 0;
+    StackAlignment = 0;
 
     Inlining = NoInlining;
     RelocationModel = "pic";

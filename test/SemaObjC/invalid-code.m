@@ -2,7 +2,8 @@
 
 // rdar://6124613
 void test1() {
-  void *p = @1; // expected-error {{unexpected '@' in program}}
+  void *xyzzy = 0;
+  void *p = @xyzzy; // expected-error {{unexpected '@' in program}}
 }
 
 // <rdar://problem/7495713>
@@ -19,3 +20,25 @@ void foo() {
   @throw (id)0 // expected-error{{expected ';' after @throw}}
 }
 
+// <rdar://problem/10415026>
+@class NSView;
+@implementation IBFillView(IBFillViewIntegration) // expected-error {{cannot find interface declaration for 'IBFillView'}}
+- (NSView *)ibDesignableContentView {
+    [Cake lie]; // expected-error {{undeclared}}
+    return self;
+}
+@end
+
+@interface I
+@end
+@interface I2
+@end
+
+@implementation I // expected-note {{started here}}
+-(void) foo {}
+
+@implementation I2 // expected-error {{missing '@end'}}
+-(void) foo2 {}
+@end
+
+@end // expected-error {{'@end' must appear in an Objective-C context}}
