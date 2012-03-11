@@ -1646,13 +1646,10 @@ StmtResult Parser::ParseYieldStatement(ParsedAttributes &attrs) {
       return StmtError();
     }
 
-    // FIXME: This is a hack to allow something like C++0x's generalized
-    // initializer lists, but only enough of this feature to allow Clang to
-    // parse libstdc++ 4.5's headers.
-    if (Tok.is(tok::l_brace) && getLang().CPlusPlus) {
+    if (Tok.is(tok::l_brace) && getLangOpts().CPlusPlus) {
       R = ParseInitializer();
       if (R.isUsable())
-        Diag(R.get()->getLocStart(), getLang().CPlusPlus0x ?
+        Diag(R.get()->getLocStart(), getLangOpts().CPlusPlus0x ?
              diag::warn_cxx98_compat_generalized_initializer_lists :
              diag::ext_generalized_initializer_lists)
           << R.get()->getSourceRange();
@@ -1663,6 +1660,7 @@ StmtResult Parser::ParseYieldStatement(ParsedAttributes &attrs) {
       return StmtError();
     }
   }
+
   return Actions.ActOnYieldStmt(YieldLoc, R.take());
 }
 
