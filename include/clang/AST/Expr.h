@@ -1047,6 +1047,7 @@ public:
   enum IdentType {
     Func,
     Function,
+    FunctionWide,
     PrettyFunction,
     /// PrettyFunctionNoVirtual - The same as PrettyFunction, except that the
     /// 'virtual' keyword is omitted for virtual member functions.
@@ -1075,6 +1076,7 @@ public:
   void setLocation(SourceLocation L) { Loc = L; }
 
   static std::string ComputeName(IdentType IT, const Decl *CurrentDecl);
+  static QualType ComputeType(ASTContext & Context, IdentType IT, const Decl *CurrentDecl);
 
   SourceRange getSourceRange() const LLVM_READONLY { return SourceRange(Loc); }
 

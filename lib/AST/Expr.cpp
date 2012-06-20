@@ -527,6 +527,21 @@ std::string PredefinedExpr::ComputeName(IdentType IT, const Decl *CurrentDecl) {
   return "";
 }
 
+QualType PredefinedExpr::ComputeType(ASTContext & Context, IdentType IT, const Decl *CurrentDecl) {
+  // Pre-defined identifiers are of type char[x], where x is the length of the
+  // string, with the exception of __FUNCTIONW__, which is of type wchar_t[x].
+
+  unsigned Length = PredefinedExpr::ComputeName(IT, CurrentDecl).length();
+  llvm::APInt LengthI(32, Length + 1);
+  QualType ResTy;
+  if (IT != FunctionWide)
+    ResTy = Context.CharTy.withConst();
+  else
+    ResTy = Context.WCharTy.withConst();
+  ResTy = Context.getConstantArrayType(ResTy, LengthI, ArrayType::Normal, 0);
+  return ResTy;
+}
+
 void APNumericStorage::setIntValue(ASTContext &C, const llvm::APInt &Val) {
   if (hasAllocation())
     C.Deallocate(pVal);

@@ -1680,6 +1680,7 @@ LValue CodeGenFunction::EmitPredefinedLValue(const PredefinedExpr *E) {
 
   case PredefinedExpr::Func:
   case PredefinedExpr::Function:
+  case PredefinedExpr::FunctionWide:
   case PredefinedExpr::PrettyFunction: {
     unsigned Type = E->getIdentType();
     std::string GlobalVarName;
@@ -1691,6 +1692,9 @@ LValue CodeGenFunction::EmitPredefinedLValue(const PredefinedExpr *E) {
       break;
     case PredefinedExpr::Function:
       GlobalVarName = "__FUNCTION__.";
+      break;
+    case PredefinedExpr::FunctionWide:
+      GlobalVarName = "__FUNCTIONW__.";
       break;
     case PredefinedExpr::PrettyFunction:
       GlobalVarName = "__PRETTY_FUNCTION__.";
@@ -1711,8 +1715,17 @@ LValue CodeGenFunction::EmitPredefinedLValue(const PredefinedExpr *E) {
          ? FnName.str()
          : PredefinedExpr::ComputeName((PredefinedExpr::IdentType)Type, CurDecl));
 
-    llvm::Constant *C =
-      CGM.GetAddrOfConstantCString(FunctionName, GlobalVarName.c_str());
+    llvm::Constant *C;
+    switch (Type) {
+    case PredefinedExpr::FunctionWide: // FIXME: Implement this
+    default:
+      llvm_unreachable("Invalid type");
+    case PredefinedExpr::Func:
+    case PredefinedExpr::Function:
+    case PredefinedExpr::PrettyFunction:
+      C = CGM.GetAddrOfConstantCString(FunctionName, GlobalVarName.c_str());
+      break;
+    }
     return MakeAddrLValue(C, E->getType());
   }
   }

@@ -2383,11 +2383,9 @@ ExprResult Sema::ActOnPredefinedExpr(SourceLocation Loc, tok::TokenKind Kind) {
   default: llvm_unreachable("Unknown simple primary expr!");
   case tok::kw___func__: IT = PredefinedExpr::Func; break; // [C99 6.4.2.2]
   case tok::kw___FUNCTION__: IT = PredefinedExpr::Function; break;
+  case tok::kw___FUNCTIONW__: IT = PredefinedExpr::FunctionWide; break;
   case tok::kw___PRETTY_FUNCTION__: IT = PredefinedExpr::PrettyFunction; break;
   }
-
-  // Pre-defined identifiers are of type char[x], where x is the length of the
-  // string.
 
   Decl *currentDecl = getCurFunctionOrMethodDecl();
   if (!currentDecl && getCurBlock())
@@ -2401,11 +2399,7 @@ ExprResult Sema::ActOnPredefinedExpr(SourceLocation Loc, tok::TokenKind Kind) {
   if (cast<DeclContext>(currentDecl)->isDependentContext()) {
     ResTy = Context.DependentTy;
   } else {
-    unsigned Length = PredefinedExpr::ComputeName(IT, currentDecl).length();
-
-    llvm::APInt LengthI(32, Length + 1);
-    ResTy = Context.CharTy.withConst();
-    ResTy = Context.getConstantArrayType(ResTy, LengthI, ArrayType::Normal, 0);
+    ResTy = PredefinedExpr::ComputeType(Context, IT, currentDecl);
   }
   return Owned(new (Context) PredefinedExpr(Loc, ResTy, IT));
 }

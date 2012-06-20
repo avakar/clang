@@ -2899,6 +2899,7 @@ static void AddPrettyFunctionResults(const LangOptions &LangOpts,
   
   Results.AddResult(Result("__PRETTY_FUNCTION__", CCP_Constant));
   Results.AddResult(Result("__FUNCTION__", CCP_Constant));
+  Results.AddResult(Result("__FUNCTIONW__", CCP_Constant));
   if (LangOpts.C99 || LangOpts.CPlusPlus0x)
     Results.AddResult(Result("__func__", CCP_Constant));
   Results.ExitScope();

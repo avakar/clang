@@ -522,6 +522,7 @@ class CastExpressionIdValidator : public CorrectionCandidateCallback {
 /// [C11]   generic-selection
 ///         '__func__'        [C99 6.4.2.2]
 /// [GNU]   '__FUNCTION__'
+/// [MS]    '__FUNCTIONW__'
 /// [GNU]   '__PRETTY_FUNCTION__'
 /// [GNU]   '(' compound-statement ')'
 /// [GNU]   '__builtin_va_arg' '(' assignment-expression ',' type-name ')'
@@ -846,6 +847,7 @@ ExprResult Parser::ParseCastExpression(bool isUnaryExpression,
     break;
   case tok::kw___func__:       // primary-expression: __func__ [C99 6.4.2.2]
   case tok::kw___FUNCTION__:   // primary-expression: __FUNCTION__ [GNU]
+  case tok::kw___FUNCTIONW__:  // primary-expression: __FUNCTIONW__ [MS]
   case tok::kw___PRETTY_FUNCTION__:  // primary-expression: __P..Y_F..N__ [GNU]
     Res = Actions.ActOnPredefinedExpr(Tok.getLocation(), SavedKind);
     ConsumeToken();
