@@ -1546,9 +1546,24 @@ bool Sema::FindAllocationFunctions(SourceLocation StartLoc, SourceRange Range,
     // Didn't find a member overload. Look for a global one.
     DeclareGlobalNewDelete();
     DeclContext *TUDecl = Context.getTranslationUnitDecl();
-    if (FindAllocationOverload(StartLoc, Range, NewName, &AllocArgs[0],
+
+    // Microsoft will fallback to `operator new` if `operator new[]`
+    // cannot be looked up.
+    bool AllowNonArrayFallback = IsArray && Context.getLangOpts().MicrosoftMode;
+
+    bool Found = !FindAllocationOverload(StartLoc, Range, NewName, &AllocArgs[0],
                           AllocArgs.size(), TUDecl, /*AllowMissing=*/false,
-                          OperatorNew))
+                          OperatorNew, /*Diagnose=*/!AllowNonArrayFallback);
+
+    if (!Found && AllowNonArrayFallback) {
+      NewName = Context.DeclarationNames.getCXXOperatorName(OO_New);
+      DeleteName = Context.DeclarationNames.getCXXOperatorName(OO_Delete);
+      Found = !FindAllocationOverload(StartLoc, Range, NewName, &AllocArgs[0],
+                            AllocArgs.size(), TUDecl, /*AllowMissing=*/false,
+                            OperatorNew);
+    }
+
+    if (!Found)
       return true;
   }
 
