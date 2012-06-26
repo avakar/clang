@@ -9255,7 +9255,9 @@ FieldDecl *Sema::CheckFieldDecl(DeclarationName Name, QualType T,
 
       // C++ [class.union]p1: If a union contains a member of reference type,
       // the program is ill-formed.
-      if (EltTy->isReferenceType()) {
+      //
+      // MS allows this even when language extensions are disabled.
+      if (EltTy->isReferenceType() && !getLangOpts().MicrosoftMode) {
         Diag(NewFD->getLocation(), diag::err_union_member_of_reference_type)
           << NewFD->getDeclName() << EltTy;
         NewFD->setInvalidDecl();
