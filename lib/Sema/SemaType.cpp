@@ -3912,7 +3912,7 @@ static bool handleFunctionTypeAttr(TypeProcessingState &state,
     }
 
     const FunctionProtoType *FnP = cast<FunctionProtoType>(fn);
-    if (FnP->isVariadic()) {
+    if (FnP->isVariadic() && !S.getLangOpts().MicrosoftMode) {
       S.Diag(attr.getLoc(), diag::err_cconv_varargs)
         << FunctionType::getNameForCallConv(CC);
       attr.setInvalid();
