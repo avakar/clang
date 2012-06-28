@@ -1445,6 +1445,11 @@ bool Sema::LookupQualifiedName(LookupResult &R, DeclContext *LookupCtx,
   if (!LookupRec || !LookupRec->getDefinition())
     return false;
 
+  return LookupInBaseClasses(R, LookupRec, InUnqualifiedLookup);
+}
+
+bool Sema::LookupInBaseClasses(LookupResult &R, CXXRecordDecl *LookupRec,
+                         bool InUnqualifiedLookup) {
   // If we're performing qualified name lookup into a dependent class,
   // then we are actually looking into a current instantiation. If we have any
   // dependent base classes, then we either have to delay lookup until
@@ -3306,6 +3311,7 @@ static void getNestedNameSpecifierIdentifiers(
     break;
 
   case NestedNameSpecifier::Global:
+  case NestedNameSpecifier::MsSuper:
     return;
   }
 

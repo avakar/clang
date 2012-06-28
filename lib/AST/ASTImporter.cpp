@@ -4331,6 +4331,9 @@ NestedNameSpecifier *ASTImporter::Import(NestedNameSpecifier *FromNNS) {
   case NestedNameSpecifier::Global:
     return NestedNameSpecifier::GlobalSpecifier(ToContext);
 
+  case NestedNameSpecifier::MsSuper:
+    return NestedNameSpecifier::MsSuperSpecifier(ToContext);
+
   case NestedNameSpecifier::TypeSpec:
   case NestedNameSpecifier::TypeSpecWithTemplate: {
       QualType T = Import(QualType(FromNNS->getAsType(), 0u));
