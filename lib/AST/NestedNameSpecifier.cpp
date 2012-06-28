@@ -23,6 +23,8 @@
 
 using namespace clang;
 
+char NestedNameSpecifier::MsSuperSpecifierId;
+
 NestedNameSpecifier *
 NestedNameSpecifier::FindOrInsert(const ASTContext &Context,
                                   const NestedNameSpecifier &Mockup) {
@@ -111,9 +113,21 @@ NestedNameSpecifier::GlobalSpecifier(const ASTContext &Context) {
   return Context.GlobalNestedNameSpecifier;
 }
 
+NestedNameSpecifier *
+NestedNameSpecifier::MsSuperSpecifier(const ASTContext &Context) {
+  if (!Context.MsSuperNestedNameSpecifier) {
+    Context.MsSuperNestedNameSpecifier = new (Context, 4) NestedNameSpecifier();
+	Context.MsSuperNestedNameSpecifier->Specifier = &MsSuperSpecifierId;
+  }
+  return Context.MsSuperNestedNameSpecifier;
+}
+
 NestedNameSpecifier::SpecifierKind NestedNameSpecifier::getKind() const {
   if (Specifier == 0)
     return Global;
+
+  if (Specifier == &MsSuperSpecifierId)
+    return MsSuper;
 
   switch (Prefix.getInt()) {
   case StoredIdentifier:
@@ -163,6 +177,7 @@ bool NestedNameSpecifier::isDependent() const {
   case Namespace:
   case NamespaceAlias:
   case Global:
+  case MsSuper:
     return false;
 
   case TypeSpec:
@@ -184,6 +199,7 @@ bool NestedNameSpecifier::isInstantiationDependent() const {
   case Namespace:
   case NamespaceAlias:
   case Global:
+  case MsSuper:
     return false;
     
   case TypeSpec:
@@ -202,6 +218,7 @@ bool NestedNameSpecifier::containsUnexpandedParameterPack() const {
   case Namespace:
   case NamespaceAlias:
   case Global:
+  case MsSuper:
     return false;
 
   case TypeSpec:
@@ -237,6 +254,10 @@ NestedNameSpecifier::print(raw_ostream &OS,
     break;
 
   case Global:
+    break;
+
+  case MsSuper:
+    OS << "__super";
     break;
 
   case TypeSpecWithTemplate:
@@ -301,6 +322,7 @@ NestedNameSpecifierLoc::getLocalDataLength(NestedNameSpecifier *Qualifier) {
   case NestedNameSpecifier::Identifier:
   case NestedNameSpecifier::Namespace:
   case NestedNameSpecifier::NamespaceAlias:
+  case NestedNameSpecifier::MsSuper:
     // The location of the identifier or namespace name.
     Length += sizeof(unsigned);
     break;
@@ -366,6 +388,7 @@ SourceRange NestedNameSpecifierLoc::getLocalSourceRange() const {
   case NestedNameSpecifier::Identifier:
   case NestedNameSpecifier::Namespace:
   case NestedNameSpecifier::NamespaceAlias:
+  case NestedNameSpecifier::MsSuper:
     return SourceRange(LoadSourceLocation(Data, Offset),
                        LoadSourceLocation(Data, Offset + sizeof(unsigned)));
 
@@ -553,6 +576,17 @@ void NestedNameSpecifierLocBuilder::MakeGlobal(ASTContext &Context,
   SaveSourceLocation(ColonColonLoc, Buffer, BufferSize, BufferCapacity);
 }
 
+void NestedNameSpecifierLocBuilder::MakeMsSuper(ASTContext &Context,
+                                               SourceLocation MsSuperLoc,
+                                               SourceLocation ColonColonLoc) {
+  assert(!Representation && "Already have a nested-name-specifier!?");
+  Representation = NestedNameSpecifier::MsSuperSpecifier(Context);
+
+  // Push source-location info into the buffer.
+  SaveSourceLocation(MsSuperLoc, Buffer, BufferSize, BufferCapacity);
+  SaveSourceLocation(ColonColonLoc, Buffer, BufferSize, BufferCapacity);
+}
+
 void NestedNameSpecifierLocBuilder::MakeTrivial(ASTContext &Context, 
                                                 NestedNameSpecifier *Qualifier, 
                                                 SourceRange R) {
@@ -571,6 +605,7 @@ void NestedNameSpecifierLocBuilder::MakeTrivial(ASTContext &Context,
       case NestedNameSpecifier::Identifier:
       case NestedNameSpecifier::Namespace:
       case NestedNameSpecifier::NamespaceAlias:
+      case NestedNameSpecifier::MsSuper:
         SaveSourceLocation(R.getBegin(), Buffer, BufferSize, BufferCapacity);
         break;
         

@@ -2091,6 +2091,8 @@ public:
                   bool AllowBuiltinCreation = false);
   bool LookupQualifiedName(LookupResult &R, DeclContext *LookupCtx,
                            bool InUnqualifiedLookup = false);
+  bool LookupInBaseClasses(LookupResult &R, CXXRecordDecl *LookupRec,
+                           bool InUnqualifiedLookup = false);
   bool LookupParsedName(LookupResult &R, Scope *S, CXXScopeSpec *SS,
                         bool AllowBuiltinCreation = false,
                         bool EnteringContext = false);
@@ -2758,6 +2760,9 @@ public:
                                UnqualifiedId &Id,
                                bool HasTrailingLParen, bool IsAddressOfOperand,
                                CorrectionCandidateCallback *CCC = 0);
+
+  ExprResult ActOnMsSuperIdExpression(Scope *S, const DeclarationNameInfo &NameInfo,
+                                      const TemplateArgumentListInfo *TemplateArgs);
 
   void DecomposeUnqualifiedId(const UnqualifiedId &Id,
                               TemplateArgumentListInfo &Buffer,
@@ -3840,6 +3845,9 @@ public:
   /// \returns true if an error occurred, false otherwise.
   bool ActOnCXXGlobalScopeSpecifier(Scope *S, SourceLocation CCLoc,
                                     CXXScopeSpec &SS);
+
+  bool ActOnCXXMsSuperScopeSpecifier(Scope *S, SourceLocation SuperLoc,
+                                     SourceLocation CCLoc, CXXScopeSpec &SS);
 
   bool isAcceptableNestedNameSpecifier(NamedDecl *SD);
   NamedDecl *FindFirstQualifierInScope(Scope *S, NestedNameSpecifier *NNS);

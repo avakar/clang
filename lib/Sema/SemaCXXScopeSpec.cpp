@@ -155,6 +155,9 @@ DeclContext *Sema::computeDeclContext(const CXXScopeSpec &SS,
 
   case NestedNameSpecifier::Global:
     return Context.getTranslationUnitDecl();
+
+  case NestedNameSpecifier::MsSuper:
+    return 0;
   }
 
   llvm_unreachable("Invalid NestedNameSpecifier::Kind!");
@@ -264,6 +267,12 @@ bool Sema::RequireCompleteDeclContext(CXXScopeSpec &SS,
 bool Sema::ActOnCXXGlobalScopeSpecifier(Scope *S, SourceLocation CCLoc,
                                         CXXScopeSpec &SS) {
   SS.MakeGlobal(Context, CCLoc);
+  return false;
+}
+
+bool Sema::ActOnCXXMsSuperScopeSpecifier(Scope *S, SourceLocation SuperLoc,
+                                         SourceLocation CCLoc, CXXScopeSpec &SS) {
+  SS.MakeMsSuper(Context, SuperLoc, CCLoc);
   return false;
 }
 
