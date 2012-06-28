@@ -4984,7 +4984,10 @@ static bool CheckTemplateSpecializationScope(Sema &S,
     // C++0x [temp.expl.spec]p2:
     //   An explicit specialization shall be declared in a namespace enclosing
     //   the specialized template.
-    if (!DC->InEnclosingNamespaceSetOf(SpecializedContext)) {
+    //
+    // MS:
+    //   An explicit specialization can be declared in any namespace.
+    if (!S.getLangOpts().MicrosoftMode && !DC->InEnclosingNamespaceSetOf(SpecializedContext)) {
       bool IsCPlusPlus0xExtension = DC->Encloses(SpecializedContext);
       if (isa<TranslationUnitDecl>(SpecializedContext)) {
         assert(!IsCPlusPlus0xExtension &&
