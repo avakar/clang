@@ -4985,7 +4985,10 @@ static bool CheckTemplateSpecializationScope(Sema &S,
     // C++0x [temp.expl.spec]p2:
     //   An explicit specialization shall be declared in a namespace enclosing
     //   the specialized template.
-    if (!DC->InEnclosingNamespaceSetOf(SpecializedContext)) {
+    //
+    // MS:
+    //   An explicit specialization can be declared in any namespace.
+    if (!S.getLangOpts().MicrosoftMode && !DC->InEnclosingNamespaceSetOf(SpecializedContext)) {
       bool IsCPlusPlus0xExtension = DC->Encloses(SpecializedContext);
       if (isa<TranslationUnitDecl>(SpecializedContext)) {
         assert(!IsCPlusPlus0xExtension &&
@@ -5017,7 +5020,7 @@ static bool CheckTemplateSpecializationScope(Sema &S,
   // functions, so we skip the check here for those kinds of entities.
   // FIXME: HandleDeclarator's diagnostics aren't quite as good, though.
   // Should we refactor that check, so that it occurs later?
-  if (!ComplainedAboutScope && !DC->Encloses(SpecializedContext) &&
+  if (!S.getLangOpts().MicrosoftMode && !ComplainedAboutScope && !DC->Encloses(SpecializedContext) &&
       !(isa<FunctionTemplateDecl>(Specialized) || isa<VarDecl>(Specialized) ||
         isa<FunctionDecl>(Specialized))) {
     if (isa<TranslationUnitDecl>(SpecializedContext))
