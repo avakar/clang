@@ -555,6 +555,7 @@ ASTContext::ASTContext(LangOptions& LOpts, SourceManager &SM,
     DependentTemplateSpecializationTypes(this_()),
     SubstTemplateTemplateParmPacks(this_()),
     GlobalNestedNameSpecifier(0), 
+    MsSuperNestedNameSpecifier(0),
     Int128Decl(0), UInt128Decl(0),
     BuiltinVaListDecl(0),
     ObjCIdDecl(0), ObjCSelDecl(0), ObjCClassDecl(0), ObjCProtocolClassDecl(0),
@@ -3766,7 +3767,8 @@ ASTContext::getCanonicalNestedNameSpecifier(NestedNameSpecifier *NNS) const {
   }
 
   case NestedNameSpecifier::Global:
-    // The global specifier is canonical and unique.
+  case NestedNameSpecifier::MsSuper:
+    // Bot the global and the __super specifier are canonical and unique.
     return NNS;
   }
 

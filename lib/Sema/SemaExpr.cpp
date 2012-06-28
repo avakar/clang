@@ -1660,6 +1660,11 @@ bool Sema::DiagnoseEmptyLookup(Scope *S, CXXScopeSpec &SS, LookupResult &R,
   return true;
 }
 
+ExprResult Sema::ActOnMsSuperIdExpression(Scope *S, const DeclarationNameInfo &NameInfo,
+                                          const TemplateArgumentListInfo *TemplateArgs) {
+  return ExprResult();
+}
+
 ExprResult Sema::ActOnIdExpression(Scope *S,
                                    CXXScopeSpec &SS,
                                    SourceLocation TemplateKWLoc,
@@ -1672,6 +1677,7 @@ ExprResult Sema::ActOnIdExpression(Scope *S,
 
   if (SS.isInvalid())
     return ExprError();
+  const NestedNameSpecifier * NNS = SS.getScopeRep();
 
   TemplateArgumentListInfo TemplateArgsBuffer;
 
@@ -1679,6 +1685,20 @@ ExprResult Sema::ActOnIdExpression(Scope *S,
   DeclarationNameInfo NameInfo;
   const TemplateArgumentListInfo *TemplateArgs;
   DecomposeUnqualifiedId(Id, TemplateArgsBuffer, NameInfo, TemplateArgs);
+
+  if (NNS && NNS->getKind() == NestedNameSpecifier::MsSuper) {
+    Scope * FnScope = S->getFnParent();
+    DeclContext * DC = static_cast<DeclContext *>(FnScope->getEntity());
+    FunctionDecl * Fn = llvm::dyn_cast<FunctionDecl>(DC);
+    CXXMethodDecl * Method = llvm::dyn_cast_or_null<CXXMethodDecl>(Fn);
+    CXXRecordDecl * Rec = Method->getParent();
+
+    LookupResult R(*this, NameInfo, LookupOrdinaryName);
+    if (!LookupInBaseClasses(R, Rec))
+      return ExprError();
+
+    return BuildImplicitMemberExpr(SS, SourceLocation(), R, /*TemplateArgs=*/0, /*IsDefiniteInstance=*/true);
+  }
 
   DeclarationName Name = NameInfo.getName();
   IdentifierInfo *II = Name.getAsIdentifierInfo();
@@ -2094,7 +2114,7 @@ Sema::PerformObjectMemberConversion(Expr *From,
   //     x = 17; // error: ambiguous base subobjects
   //     Derived1::x = 17; // okay, pick the Base subobject of Derived1
   //   }
-  if (Qualifier) {
+  if (Qualifier && Qualifier->getKind() != NestedNameSpecifier::MsSuper) {
     QualType QType = QualType(Qualifier->getAsType(), 0);
     assert(!QType.isNull() && "lookup done with dependent qualifier?");
     assert(QType->isRecordType() && "lookup done with non-record type");

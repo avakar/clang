@@ -3495,6 +3495,7 @@ bool UnnamedLocalNoLinkageFinder::VisitNestedNameSpecifier(
   case NestedNameSpecifier::Namespace:
   case NestedNameSpecifier::NamespaceAlias:
   case NestedNameSpecifier::Global:
+  case NestedNameSpecifier::MsSuper:
     return false;
 
   case NestedNameSpecifier::TypeSpec:

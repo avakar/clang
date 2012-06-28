@@ -2716,6 +2716,12 @@ TreeTransform<Derived>::TransformNestedNameSpecifierLoc(
       SS.MakeGlobal(SemaRef.Context, Q.getBeginLoc());
       break;
 
+    case NestedNameSpecifier::MsSuper:
+      // There is no meaningful transformation that one could perform on the
+      // __super specifier.
+      SS.MakeMsSuper(SemaRef.Context, Q.getBeginLoc(), Q.getEndLoc());
+      break;
+
     case NestedNameSpecifier::TypeSpecWithTemplate:
     case NestedNameSpecifier::TypeSpec: {
       TypeLoc TL = TransformTypeInObjectScope(Q.getTypeLoc(), ObjectType,

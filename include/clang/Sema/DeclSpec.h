@@ -141,6 +141,10 @@ public:
   /// nested-name-specifier '::'.
   void MakeGlobal(ASTContext &Context, SourceLocation ColonColonLoc);
   
+  /// \brief Turn this (empty) nested-name-specifier into the Microsoft's
+  /// '__super' specifier.
+  void MakeMsSuper(ASTContext &Context, SourceLocation MsSuperLoc, SourceLocation ColonColonLoc);
+
   /// \brief Make a new nested-name-specifier from incomplete source-location
   /// information.
   ///

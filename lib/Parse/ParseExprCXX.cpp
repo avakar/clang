@@ -150,8 +150,17 @@ bool Parser::ParseOptionalCXXScopeSpecifier(CXXScopeSpec &SS,
   }
 
   bool HasScopeSpecifier = false;
+  if (Tok.is(tok::kw___super)) {
+    SourceLocation SuperLoc = ConsumeToken();
+    if (Tok.isNot(tok::coloncolon)) {
+      // XXX: Diagnose
+      return true;
+    }
 
-  if (Tok.is(tok::coloncolon)) {
+    if (Actions.ActOnCXXMsSuperScopeSpecifier(getCurScope(), SuperLoc, ConsumeToken(), SS))
+      return true;
+    HasScopeSpecifier = true;
+  } else if (Tok.is(tok::coloncolon)) {
     // ::new and ::delete aren't nested-name-specifiers.
     tok::TokenKind NextKind = NextToken().getKind();
     if (NextKind == tok::kw_new || NextKind == tok::kw_delete)

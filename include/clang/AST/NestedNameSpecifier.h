@@ -67,6 +67,8 @@ class NestedNameSpecifier : public llvm::FoldingSetNode {
   /// specifier as encoded within the prefix.
   void* Specifier;
 
+  static char MsSuperSpecifierId;
+
 public:
   /// \brief The kind of specifier that completes this nested name
   /// specifier.
@@ -83,7 +85,9 @@ public:
     /// stored as a Type*.
     TypeSpecWithTemplate,
     /// \brief The global specifier '::'. There is no stored value.
-    Global
+    Global,
+    /// \brief The Microsoft's '__super' keyword. There is no stored value.
+    MsSuper
   };
 
 private:
@@ -142,6 +146,9 @@ public:
   /// \brief Returns the nested name specifier representing the global
   /// scope.
   static NestedNameSpecifier *GlobalSpecifier(const ASTContext &Context);
+
+  /// \brief Returns the nested name specifier representing the __super keyword.
+  static NestedNameSpecifier *MsSuperSpecifier(const ASTContext &Context);
 
   /// \brief Return the prefix of this nested name specifier.
   ///
@@ -416,6 +423,10 @@ public:
   /// \brief Turn this (empty) nested-name-specifier into the global
   /// nested-name-specifier '::'.
   void MakeGlobal(ASTContext &Context, SourceLocation ColonColonLoc);
+
+  /// \brief Turn this (empty) nested-name-specifier into the Microsoft's
+  /// '__super' specifier.
+  void MakeMsSuper(ASTContext &Context, SourceLocation MsSuperLoc, SourceLocation ColonColonLoc);
 
   /// \brief Make a new nested-name-specifier from incomplete source-location
   /// information.
