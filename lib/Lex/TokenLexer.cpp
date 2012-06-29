@@ -192,6 +192,23 @@ void TokenLexer::ExpandFunctionArguments() {
     // input.
     MadeChange = true;
 
+    if (PP.getLangOpts().MicrosoftMode &&
+        (unsigned)ArgNo == Macro->getNumArgs()-1 && // is __VA_ARGS__
+        ActualArgs->isVarargsElidedUse() &&       // Argument elided.
+        !ResultToks.empty() && ResultToks.back().is(tok::comma)) {
+      // Never add a space, even if the comma or arg had a space.
+      NextTokGetsSpace = false;
+
+      // Remove the comma
+      ResultToks.pop_back();
+
+      // If the comma was right after another paste (e.g. "X##,__VA_ARGS__"),
+      // the paste is ignored by MS compilers.
+      if (!ResultToks.empty() && ResultToks.back().is(tok::hashhash))
+        ResultToks.pop_back();
+      continue;
+    }
+
     // Otherwise, this is a use of the argument.  Find out if there is a paste
     // (##) operator before or after the argument.
     bool PasteBefore =
