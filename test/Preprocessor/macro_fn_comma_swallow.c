@@ -26,3 +26,8 @@
 // CHECK: 5: 1
 #define X5(x,...) x##,##__VA_ARGS__
 5: X5(1)
+
+// should not eat the comma.
+// CHECK: 6: {foo,}
+#define X6(b, ...) {b,__VA_ARGS__}
+6: X6(foo)
