@@ -3749,7 +3749,7 @@ static bool handleFunctionTypeAttr(TypeProcessingState &state,
   }
 
   // Diagnose the use of X86 fastcall on varargs or unprototyped functions.
-  if (CC == CC_X86FastCall) {
+  if (CC == CC_X86FastCall && !S.getLangOpts().MicrosoftMode) {
     if (isa<FunctionNoProtoType>(fn)) {
       S.Diag(attr.getLoc(), diag::err_cconv_knr)
         << FunctionType::getNameForCallConv(CC);
