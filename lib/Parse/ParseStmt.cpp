@@ -310,6 +310,11 @@ Retry:
     ProhibitAttributes(Attrs);
     HandlePragmaPack();
     return StmtEmpty();
+
+  case tok::kw___if_exists:
+  case tok::kw___if_not_exists:
+    ParseMicrosoftIfExistsStatement(Stmts);
+    return StmtEmpty();
   }
 
   // If we reached this code, the statement must end in a semicolon.
@@ -780,12 +785,6 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
   while (Tok.isNot(tok::r_brace) && Tok.isNot(tok::eof)) {
     if (Tok.is(tok::annot_pragma_unused)) {
       HandlePragmaUnused();
-      continue;
-    }
-
-    if (getLangOpts().MicrosoftExt && (Tok.is(tok::kw___if_exists) ||
-        Tok.is(tok::kw___if_not_exists))) {
-      ParseMicrosoftIfExistsStatement(Stmts);
       continue;
     }
 
