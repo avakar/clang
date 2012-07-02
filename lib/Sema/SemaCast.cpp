@@ -135,7 +135,12 @@ namespace {
       SrcExpr = Self.CheckPlaceholderExpr(SrcExpr.take());
       if (SrcExpr.isInvalid())
         return;
-      PlaceholderKind = (BuiltinType::Kind) 0;
+      if (const BuiltinType *placeholder =
+            SrcExpr.get()->getType()->getAsPlaceholderType()) {
+        PlaceholderKind = placeholder->getKind();
+      } else {
+        PlaceholderKind = (BuiltinType::Kind) 0;
+      }
     }
   };
 }

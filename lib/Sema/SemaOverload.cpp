@@ -9029,7 +9029,7 @@ private:
     
     // If the overload expression doesn't have the form of a pointer to
     // member, don't try to convert it to a pointer-to-member type.
-    if (IsInvalidFormOfPointerToMemberFunction())
+    if (!S.getLangOpts().MicrosoftExt && IsInvalidFormOfPointerToMemberFunction())
       return false;
 
     for (UnresolvedSetIterator I = OvlExpr->decls_begin(),
@@ -11242,7 +11242,7 @@ Expr *Sema::FixOverloadedFunctionReference(Expr *E, DeclAccessPair Found,
 
         assert(isa<DeclRefExpr>(SubExpr)
                && "fixed to something other than a decl ref");
-        assert(cast<DeclRefExpr>(SubExpr)->getQualifier()
+        assert((getLangOpts().MicrosoftExt || cast<DeclRefExpr>(SubExpr)->getQualifier())
                && "fixed to a member ref with no nested name qualifier");
 
         // We have taken the address of a pointer to member

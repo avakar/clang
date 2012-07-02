@@ -247,10 +247,11 @@ Sema::BuildPossibleImplicitMemberExpr(const CXXScopeSpec &SS,
     return BuildDeclarationNameExpr(SS, R, false);
 
   case IMA_Error_StaticContext:
-  case IMA_Error_Unrelated:
+  case IMA_Error_Unrelated: {
     diagnoseInstanceReference(*this, SS, R.getRepresentativeDecl(),
                               R.getLookupNameInfo());
     return ExprError();
+  }
   }
 
   llvm_unreachable("unexpected instance member access kind");

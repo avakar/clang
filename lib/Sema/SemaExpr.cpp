@@ -1860,6 +1860,18 @@ ExprResult Sema::ActOnIdExpression(Scope *S,
       MightBeImplicitMember = isa<FieldDecl>(R.getFoundDecl()) ||
                               isa<IndirectFieldDecl>(R.getFoundDecl());
 
+    if (MightBeImplicitMember && getLangOpts().MicrosoftExt && !TemplateArgs && S->getFnParent()) {
+      CXXMethodDecl * MM = dyn_cast<CXXMethodDecl>(*R.begin());
+      DeclContext * DC = static_cast<DeclContext *>(S->getFnParent()->getEntity());
+      CXXMethodDecl * M = dyn_cast_or_null<CXXMethodDecl>(DC);
+      if (MM && M && M->isStatic()) {
+        ExprResult E = BuildDeclarationNameExpr(SS, R, ADL);
+        if (E.isInvalid())
+          return E;
+        return ActOnUnaryOp(S, SourceLocation(), tok::amp, E.get());
+      }
+    }
+
     if (MightBeImplicitMember)
       return BuildPossibleImplicitMemberExpr(SS, TemplateKWLoc,
                                              R, TemplateArgs);
@@ -7922,7 +7934,7 @@ static QualType CheckAddressOfOperand(Sema &S, ExprResult &OrigOp,
         << OrigOp.get()->getSourceRange();
 
     // The method was named without a qualifier.
-    } else if (!DRE->getQualifier()) {
+    } else if (!S.getLangOpts().MicrosoftExt && !DRE->getQualifier()) {
       S.Diag(OpLoc, diag::err_unqualified_pointer_member_function)
         << op->getSourceRange();
     }
@@ -11684,8 +11696,46 @@ ExprResult Sema::CheckPlaceholderExpr(Expr *E) {
   // Bound member functions.
   case BuiltinType::BoundMember: {
     ExprResult result = Owned(E);
-    tryToRecoverWithCall(result, PDiag(diag::err_bound_member_function),
-                         /*complain*/ true);
+
+    if (getLangOpts().MicrosoftExt) {
+      if (MemberExpr * ME = llvm::dyn_cast<MemberExpr>(E)) {
+        if (ME->isImplicitAccess()) {
+          ValueDecl * D = ME->getMemberDecl();
+          if (D->isFunctionOrFunctionTemplate()) {
+            TemplateArgumentListInfo TemplateArgs;
+            TemplateArgumentListInfo *TemplateArgsPtr = 0;
+            if (ME->hasExplicitTemplateArgs()) {
+              ME->copyTemplateArgumentsInto(TemplateArgs);
+              TemplateArgsPtr = &TemplateArgs;
+            }
+
+            DeclRefExpr * DRE = DeclRefExpr::Create(Context, ME->getQualifierLoc(), ME->getTemplateKeywordLoc(), D, false/*XXX*/,
+                                                    ME->getMemberNameInfo(), D->getType(), ME->getValueKind(),
+                                                    ME->getFoundDecl().getDecl(), TemplateArgsPtr);
+
+            return ActOnUnaryOp(0, SourceLocation(), tok::amp, DRE);
+          }
+        }
+      } else if (UnresolvedMemberExpr * ME = dyn_cast<UnresolvedMemberExpr>(E)) {
+        if (ME->isImplicitAccess()) {
+          TemplateArgumentListInfo TemplateArgs;
+          TemplateArgumentListInfo *TemplateArgsPtr = 0;
+          if (ME->hasExplicitTemplateArgs()) {
+            ME->copyTemplateArgumentsInto(TemplateArgs);
+            TemplateArgsPtr = &TemplateArgs;
+          }
+
+          UnresolvedLookupExpr * ULE = UnresolvedLookupExpr::Create(Context, ME->getNamingClass(),
+                                                                   ME->getQualifierLoc(), ME->getTemplateKeywordLoc(),
+                                                                   ME->getMemberNameInfo(), /*ADL*/false, TemplateArgsPtr,
+                                                                   ME->decls_begin(), ME->decls_end());
+          return ActOnUnaryOp(0, SourceLocation(), tok::amp, ULE);
+        }
+      }
+    }
+
+      tryToRecoverWithCall(result, PDiag(diag::err_bound_member_function),
+                           /*complain*/ true);
     return result;
   }
 
