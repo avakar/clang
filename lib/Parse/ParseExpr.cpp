@@ -879,6 +879,59 @@ ExprResult Parser::ParseCastExpression(bool isUnaryExpression,
   case tok::kw___null:
     return Actions.ActOnGNUNullExpr(ConsumeToken());
 
+  case tok::kw___ensure_memptr: {
+    if (PP.LookAhead(0).isNot(tok::l_paren) ||
+        PP.LookAhead(1).isNot(tok::identifier) ||
+        PP.LookAhead(2).isNot(tok::comma))
+      return ExprError();
+
+    ConsumeToken();
+    ConsumeParen();
+    Token BaseClass = Tok;
+    ConsumeToken();
+    ConsumeToken();
+
+    SmallVector<Token, 8> Tokens;
+    while (Tok.isNot(tok::eof) && Tok.isNot(tok::r_paren)) {
+      if (Tok.is(tok::l_paren))
+        return ExprError();
+      Tokens.push_back(Tok);
+      PP.Lex(Tok);
+    }
+    if (Tok.isNot(tok::r_paren))
+      return ExprError();
+    ConsumeParen();
+
+    if (Tokens.size() == 1 && Tokens.front().is(tok::identifier)) {
+      Tokens.push_back(BaseClass);
+
+      Token cc;
+      cc.setKind(tok::coloncolon);
+      cc.setLocation(BaseClass.getLocation());
+      Tokens.push_back(cc);
+
+      Tokens.push_back(Tokens.front());
+
+      cc.setKind(tok::amp);
+      Tokens.front() = cc;
+    } else if (Tokens.size() == 3 && Tokens[0].is(tok::identifier) && Tokens[1].is(tok::coloncolon) && Tokens[2].is(tok::identifier)) {
+      Token a;
+      a.setKind(tok::amp);
+      a.setLocation(Tokens[0].getLocation());
+      Tokens.insert(Tokens.begin(), a);
+    }
+
+    while (!Tokens.empty()) {
+      if (PP.isBacktrackEnabled())
+        PP.RevertCachedTokens(1);
+      else
+        PP.EnterToken(Tok);
+      Tok = Tokens.pop_back_val();
+    }
+
+    return ParseCastExpression(isUnaryExpression, isAddressOfOperand, NotCastExpr, isTypeCast);
+  }
+
   case tok::plusplus:      // unary-expression: '++' unary-expression [C99]
   case tok::minusminus: {  // unary-expression: '--' unary-expression [C99]
     // C++ [expr.unary] has:
