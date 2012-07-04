@@ -273,6 +273,26 @@ void FileManager::addAncestorsAsVirtualDirs(StringRef Path) {
   addAncestorsAsVirtualDirs(DirName);
 }
 
+static StringRef NormalizePath(SmallVectorImpl<char> & Normalized, StringRef Path) {
+  Normalized.clear();
+
+  llvm::sys::path::const_iterator I = llvm::sys::path::begin(Path);
+  if (*I == ".")
+    llvm::sys::path::append(Normalized, *I);
+
+  for (llvm::sys::path::const_iterator E = llvm::sys::path::end(Path); I != E; ++I) {
+    if (*I == ".")
+      continue;
+
+    StringRef res(Normalized.data(), Normalized.size());
+    if (*I == ".." && llvm::sys::path::has_filename(res) && llvm::sys::path::filename(res) != ".." && llvm::sys::path::filename(res) != ".")
+      llvm::sys::path::remove_filename(Normalized);
+    else
+      llvm::sys::path::append(Normalized, *I);
+  }
+  return StringRef(Normalized.data(), Normalized.size());
+}
+
 const DirectoryEntry *FileManager::getDirectory(StringRef DirName,
                                                 bool CacheFailure) {
   // stat doesn't like trailing separators except for root directory.
@@ -282,6 +302,9 @@ const DirectoryEntry *FileManager::getDirectory(StringRef DirName,
       DirName != llvm::sys::path::root_path(DirName) &&
       llvm::sys::path::is_separator(DirName.back()))
     DirName = DirName.substr(0, DirName.size()-1);
+
+  SmallString<256> Normalized;
+  DirName = NormalizePath(Normalized, DirName);
 
   ++NumDirLookups;
   llvm::StringMapEntry<DirectoryEntry *> &NamedDirEnt =
@@ -329,6 +352,9 @@ const DirectoryEntry *FileManager::getDirectory(StringRef DirName,
 
 const FileEntry *FileManager::getFile(StringRef Filename, bool openFile,
                                       bool CacheFailure) {
+  SmallString<256> Normalized;
+  Filename = NormalizePath(Normalized, Filename);
+
   ++NumFileLookups;
 
   // See if there is already an entry in the map.
@@ -410,6 +436,9 @@ const FileEntry *FileManager::getFile(StringRef Filename, bool openFile,
 const FileEntry *
 FileManager::getVirtualFile(StringRef Filename, off_t Size,
                             time_t ModificationTime) {
+  SmallString<256> Normalized;
+  Filename = NormalizePath(Normalized, Filename);
+
   ++NumFileLookups;
 
   // See if there is already an entry in the map.
