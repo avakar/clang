@@ -3672,6 +3672,133 @@ static void TryDefaultInitialization(Sema &S,
   }
 }
 
+static void TryMsDoubleUserDefinedConversion(Sema &S,
+                                             const InitializationKind &Kind,
+                                             QualType DestType,
+                                             CXXRecordDecl * SourceRecordDecl,
+                                             Expr *Initializer,
+                                             InitializationSequence &Sequence) {
+
+  CXXRecordDecl * DestRecordDecl = DestType->getAsCXXRecordDecl();
+  bool AllowExplicit = Kind.AllowExplicit();
+  SourceLocation DeclLoc = Initializer->getLocStart();
+
+  CXXConstructorDecl *BestConstructor = 0;
+  OverloadCandidateSet::iterator BestConversion;
+  bool HadMultipleCandidates;
+
+  DeclContext::lookup_iterator Con, ConEnd;
+  for (llvm::tie(Con, ConEnd) = S.LookupConstructors(DestRecordDecl);
+        Con != ConEnd; ++Con) {
+    NamedDecl *D = *Con;
+    DeclAccessPair FoundDecl = DeclAccessPair::make(D, D->getAccess());
+
+    // Find the constructor (which may be a template).
+    CXXConstructorDecl *Constructor = 0;
+    FunctionTemplateDecl *ConstructorTmpl
+      = dyn_cast<FunctionTemplateDecl>(D);
+    if (ConstructorTmpl)
+      Constructor = cast<CXXConstructorDecl>(
+                                        ConstructorTmpl->getTemplatedDecl());
+    else
+      Constructor = cast<CXXConstructorDecl>(D);
+
+    if (!Constructor->isInvalidDecl() &&
+        Constructor->isConvertingConstructor(AllowExplicit) &&
+        !ConstructorTmpl) {
+
+      assert(Constructor->getNumParams() == 1);
+      QualType ConstructorParamType = Constructor->getParamDecl(0)->getType();
+
+      OverloadCandidateSet CandidateSet(Initializer->getExprLoc());
+
+      const UnresolvedSetImpl *Conversions
+        = SourceRecordDecl->getVisibleConversionFunctions();
+      for (UnresolvedSetImpl::const_iterator I = Conversions->begin(),
+        E = Conversions->end();
+        I != E; ++I) {
+          NamedDecl *D = *I;
+          CXXRecordDecl *ActingDC = cast<CXXRecordDecl>(D->getDeclContext());
+          if (isa<UsingShadowDecl>(D))
+            D = cast<UsingShadowDecl>(D)->getTargetDecl();
+
+          FunctionTemplateDecl *ConvTemplate = dyn_cast<FunctionTemplateDecl>(D);
+          CXXConversionDecl *Conv;
+          if (ConvTemplate)
+            Conv = cast<CXXConversionDecl>(ConvTemplate->getTemplatedDecl());
+          else
+            Conv = cast<CXXConversionDecl>(D);
+
+          if ((AllowExplicit || !Conv->isExplicit()) && !ConvTemplate) {
+              S.AddConversionCandidate(Conv, I.getPair(), ActingDC,
+                Initializer, ConstructorParamType, CandidateSet);
+          }
+      }
+
+      OverloadCandidateSet::iterator Best;
+      if (!CandidateSet.BestViableFunction(S, Initializer->getLocStart(), Best, true)) {
+        if (BestConstructor) {
+          Sequence.SetOverloadFailure(
+            InitializationSequence::FK_UserConversionOverloadFailed,
+            OR_No_Viable_Function);
+          return;
+        }
+
+        BestConstructor = Constructor;
+        BestConversion = Best;
+        HadMultipleCandidates = CandidateSet.size() > 1;
+      }
+    }
+  }
+
+  if (!BestConstructor) {
+    Sequence.SetOverloadFailure(
+      InitializationSequence::FK_UserConversionOverloadFailed,
+      OR_No_Viable_Function);
+    return;
+  }
+
+  // Add the constructor and the conversion to the initialization sequence.
+
+  S.MarkFunctionReferenced(DeclLoc, BestConstructor);
+
+  FunctionDecl *ConvFunction = BestConversion->Function;
+  S.MarkFunctionReferenced(DeclLoc, ConvFunction);
+
+  // Add the user-defined conversion step that calls the conversion function.
+  QualType ConstructorParamType = BestConstructor->getParamDecl(0)->getType();
+  QualType ConvType = ConvFunction->getCallResultType();
+  if (ConvType->getAs<RecordType>()) {
+    // If we're converting to a class type, there may be an copy of
+    // the resulting temporary object (possible to create an object of
+    // a base class type). That copy is not a separate conversion, so
+    // we just make a note of the actual destination type (possibly a
+    // base class of the type returned by the conversion function) and
+    // let the user-defined conversion step handle the conversion.
+    Sequence.AddUserConversionStep(ConvFunction, BestConversion->FoundDecl, ConstructorParamType,
+      HadMultipleCandidates);
+    Sequence.AddUserConversionStep(BestConstructor, DeclAccessPair::make(BestConstructor, BestConstructor->getAccess()),
+      DestType, false);
+    return;
+  }
+
+  Sequence.AddUserConversionStep(ConvFunction, BestConversion->FoundDecl, ConvType,
+    HadMultipleCandidates);
+
+  // If the conversion following the call to the conversion function
+  // is interesting, add it as a separate step.
+  if (BestConversion->FinalConversion.First || BestConversion->FinalConversion.Second ||
+    BestConversion->FinalConversion.Third) {
+      ImplicitConversionSequence ICS;
+      ICS.setStandard();
+      ICS.Standard = BestConversion->FinalConversion;
+      Sequence.AddConversionSequenceStep(ICS, ConstructorParamType);
+  }
+
+  Sequence.AddUserConversionStep(BestConstructor, DeclAccessPair::make(BestConstructor, BestConstructor->getAccess()),
+    DestType, false);
+}
+
 /// \brief Attempt a user-defined conversion between two types (C++ [dcl.init]),
 /// which enumerates all conversion functions and performs overload resolution
 /// to select the best.
@@ -3695,10 +3822,13 @@ static void TryUserDefinedConversion(Sema &S,
   // explicit conversion operators.
   bool AllowExplicit = Kind.AllowExplicit();
 
+  CXXRecordDecl *SourceRecordDecl = 0;
+  CXXRecordDecl *DestRecordDecl = 0;
+
   if (const RecordType *DestRecordType = DestType->getAs<RecordType>()) {
     // The type we're converting to is a class type. Enumerate its constructors
     // to see if there is a suitable conversion.
-    CXXRecordDecl *DestRecordDecl
+    DestRecordDecl
       = cast<CXXRecordDecl>(DestRecordType->getDecl());
 
     // Try to complete the type we're converting to.
@@ -3744,7 +3874,7 @@ static void TryUserDefinedConversion(Sema &S,
     // We can only enumerate the conversion functions for a complete type; if
     // the type isn't complete, simply skip this step.
     if (!S.RequireCompleteType(DeclLoc, SourceType, 0)) {
-      CXXRecordDecl *SourceRecordDecl
+      SourceRecordDecl
         = cast<CXXRecordDecl>(SourceRecordType->getDecl());
 
       const UnresolvedSetImpl *Conversions
@@ -3781,6 +3911,12 @@ static void TryUserDefinedConversion(Sema &S,
   OverloadCandidateSet::iterator Best;
   if (OverloadingResult Result
         = CandidateSet.BestViableFunction(S, DeclLoc, Best, true)) {
+    if (Result == OR_No_Viable_Function && S.getLangOpts().MicrosoftExt &&
+        SourceRecordDecl && DestRecordDecl) {
+      TryMsDoubleUserDefinedConversion(S, Kind, DestType, SourceRecordDecl, Initializer, Sequence);
+      return;
+    }
+
     Sequence.SetOverloadFailure(
                         InitializationSequence::FK_UserConversionOverloadFailed,
                                 Result);
@@ -5089,30 +5225,32 @@ InitializationSequence::Perform(Sema &S,
         CreatedObject = Conversion->getResultType()->isRecordType();
       }
 
-      bool RequiresCopy = !IsCopy && !isReferenceBinding(Steps.back());
-      bool MaybeBindToTemp = RequiresCopy || shouldBindAsTemporary(Entity);
+      if (&*Step == &Steps.back()) {
+        bool RequiresCopy = !IsCopy && !isReferenceBinding(Steps.back());
+        bool MaybeBindToTemp = RequiresCopy || shouldBindAsTemporary(Entity);
 
-      if (!MaybeBindToTemp && CreatedObject && shouldDestroyTemporary(Entity)) {
-        QualType T = CurInit.get()->getType();
-        if (const RecordType *Record = T->getAs<RecordType>()) {
-          CXXDestructorDecl *Destructor
-            = S.LookupDestructor(cast<CXXRecordDecl>(Record->getDecl()));
-          S.CheckDestructorAccess(CurInit.get()->getLocStart(), Destructor,
-                                  S.PDiag(diag::err_access_dtor_temp) << T);
-          S.MarkFunctionReferenced(CurInit.get()->getLocStart(), Destructor);
-          S.DiagnoseUseOfDecl(Destructor, CurInit.get()->getLocStart());
+        if (!MaybeBindToTemp && CreatedObject && shouldDestroyTemporary(Entity)) {
+          QualType T = CurInit.get()->getType();
+          if (const RecordType *Record = T->getAs<RecordType>()) {
+            CXXDestructorDecl *Destructor
+              = S.LookupDestructor(cast<CXXRecordDecl>(Record->getDecl()));
+            S.CheckDestructorAccess(CurInit.get()->getLocStart(), Destructor,
+                                    S.PDiag(diag::err_access_dtor_temp) << T);
+            S.MarkFunctionReferenced(CurInit.get()->getLocStart(), Destructor);
+            S.DiagnoseUseOfDecl(Destructor, CurInit.get()->getLocStart());
+          }
         }
-      }
 
-      CurInit = S.Owned(ImplicitCastExpr::Create(S.Context,
-                                                 CurInit.get()->getType(),
-                                                 CastKind, CurInit.get(), 0,
-                                                CurInit.get()->getValueKind()));
-      if (MaybeBindToTemp)
-        CurInit = S.MaybeBindToTemporary(CurInit.takeAs<Expr>());
-      if (RequiresCopy)
-        CurInit = CopyObject(S, Entity.getType().getNonReferenceType(), Entity,
-                             CurInit, /*IsExtraneousCopy=*/false);
+        CurInit = S.Owned(ImplicitCastExpr::Create(S.Context,
+                                                   CurInit.get()->getType(),
+                                                   CastKind, CurInit.get(), 0,
+                                                  CurInit.get()->getValueKind()));
+        if (MaybeBindToTemp)
+          CurInit = S.MaybeBindToTemporary(CurInit.takeAs<Expr>());
+        if (RequiresCopy)
+          CurInit = CopyObject(S, Entity.getType().getNonReferenceType(), Entity,
+                               CurInit, /*IsExtraneousCopy=*/false);
+      }
       break;
     }
 
