@@ -520,6 +520,27 @@ void FileManager::FixupRelativePath(SmallVectorImpl<char> &path) const {
   path = NewPath;
 }
 
+#include <Windows.h>
+
+static llvm::MemoryBuffer * transcodeBuffer(llvm::MemoryBuffer const * source)
+{
+	int len = MultiByteToWideChar(CP_ACP, 0, source->getBufferStart(), source->getBufferSize(), 0, 0);
+	if (!len)
+		return llvm::MemoryBuffer::getNewUninitMemBuffer(0);
+
+	std::vector<WCHAR> wbuf(len);
+	MultiByteToWideChar(CP_ACP, 0, source->getBufferStart(), source->getBufferSize(), &wbuf[0], wbuf.size());
+
+	len = WideCharToMultiByte(CP_UTF8, 0, &wbuf[0], wbuf.size(), 0, 0, 0, 0);
+
+	llvm::MemoryBuffer * Result = llvm::MemoryBuffer::getNewUninitMemBuffer(len);
+	if (!Result)
+		return 0;
+
+	len = WideCharToMultiByte(CP_UTF8, 0, &wbuf[0], wbuf.size(), (LPSTR)Result->getBufferStart(), Result->getBufferSize(), 0, 0);
+	return Result;
+}
+
 llvm::MemoryBuffer *FileManager::
 getBufferForFile(const FileEntry *Entry, std::string *ErrorStr,
                  bool isVolatile) {
@@ -548,14 +569,14 @@ getBufferForFile(const FileEntry *Entry, std::string *ErrorStr,
 
   if (FileSystemOpts.WorkingDir.empty()) {
     ec = llvm::MemoryBuffer::getFile(Filename, Result, FileSize);
-    if (ec && ErrorStr)
-      *ErrorStr = ec.message();
-    return Result.take();
+  } else {
+    SmallString<128> FilePath(Entry->getName());
+    FixupRelativePath(FilePath);
+    ec = llvm::MemoryBuffer::getFile(FilePath.str(), Result, FileSize);
   }
 
-  SmallString<128> FilePath(Entry->getName());
-  FixupRelativePath(FilePath);
-  ec = llvm::MemoryBuffer::getFile(FilePath.str(), Result, FileSize);
+  Result.reset(transcodeBuffer(Result.get()));
+
   if (ec && ErrorStr)
     *ErrorStr = ec.message();
   return Result.take();
