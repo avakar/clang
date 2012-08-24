@@ -1690,11 +1690,11 @@ ExprResult Sema::ActOnIdExpression(Scope *S,
     Scope * FnScope = S->getFnParent();
     DeclContext * DC = static_cast<DeclContext *>(FnScope->getEntity());
     FunctionDecl * Fn = llvm::dyn_cast<FunctionDecl>(DC);
-    CXXMethodDecl * Method = llvm::dyn_cast_or_null<CXXMethodDecl>(Fn);
+    CXXMethodDecl * Method = llvm::dyn_cast<CXXMethodDecl>(Fn);
     CXXRecordDecl * Rec = Method->getParent();
 
     LookupResult R(*this, NameInfo, LookupOrdinaryName);
-    if (!LookupInBaseClasses(R, Rec))
+    if (!LookupInBaseClasses(R, Rec, /*InUnqualifiedLookup=*/false, /*MergeBaseScopes=*/true))
       return ExprError();
 
     return BuildImplicitMemberExpr(SS, SourceLocation(), R, /*TemplateArgs=*/0, /*IsDefiniteInstance=*/true);

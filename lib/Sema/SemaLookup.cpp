@@ -1449,7 +1449,7 @@ bool Sema::LookupQualifiedName(LookupResult &R, DeclContext *LookupCtx,
 }
 
 bool Sema::LookupInBaseClasses(LookupResult &R, CXXRecordDecl *LookupRec,
-                         bool InUnqualifiedLookup) {
+                         bool InUnqualifiedLookup, bool MergeBaseScopes) {
   // If we're performing qualified name lookup into a dependent class,
   // then we are actually looking into a current instantiation. If we have any
   // dependent base classes, then we either have to delay lookup until
@@ -1530,8 +1530,8 @@ bool Sema::LookupInBaseClasses(LookupResult &R, CXXRecordDecl *LookupRec,
       continue;
     }
 
-    if (SubobjectType
-                 != Context.getCanonicalType(PathElement.Base->getType())) {
+    if (!MergeBaseScopes
+        && SubobjectType != Context.getCanonicalType(PathElement.Base->getType())) {
       // We found members of the given name in two subobjects of
       // different types. If the declaration sets aren't the same, this
       // this lookup is ambiguous.
@@ -1559,7 +1559,8 @@ bool Sema::LookupInBaseClasses(LookupResult &R, CXXRecordDecl *LookupRec,
       return true;
     }
 
-    if (SubobjectNumber != PathElement.SubobjectNumber) {
+    if (!MergeBaseScopes
+        && SubobjectNumber != PathElement.SubobjectNumber) {
       // We have a different subobject of the same type.
 
       // C++ [class.member.lookup]p5:
@@ -1578,12 +1579,17 @@ bool Sema::LookupInBaseClasses(LookupResult &R, CXXRecordDecl *LookupRec,
 
   // Lookup in a base class succeeded; return these results.
 
-  DeclContext::lookup_iterator I, E;
-  for (llvm::tie(I,E) = Paths.front().Decls; I != E; ++I) {
-    NamedDecl *D = *I;
-    AccessSpecifier AS = CXXRecordDecl::MergeAccess(SubobjectAccess,
-                                                    D->getAccess());
-    R.addDecl(D, AS);
+  for (CXXBasePaths::paths_iterator Path = Paths.begin(), PathEnd = Paths.end();
+       Path != PathEnd; ++Path) {
+    DeclContext::lookup_iterator I, E;
+    for (llvm::tie(I,E) = Path->Decls; I != E; ++I) {
+      NamedDecl *D = *I;
+      AccessSpecifier AS = CXXRecordDecl::MergeAccess(SubobjectAccess,
+                                                      D->getAccess());
+      R.addDecl(D, AS);
+    }
+    if (!MergeBaseScopes)
+      break;
   }
   R.resolveKind();
   return true;

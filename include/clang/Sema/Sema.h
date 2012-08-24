@@ -2135,7 +2135,7 @@ public:
   bool LookupQualifiedName(LookupResult &R, DeclContext *LookupCtx,
                            bool InUnqualifiedLookup = false);
   bool LookupInBaseClasses(LookupResult &R, CXXRecordDecl *LookupRec,
-                           bool InUnqualifiedLookup = false);
+                           bool InUnqualifiedLookup = false, bool MergeBaseScopes = false);
   bool LookupParsedName(LookupResult &R, Scope *S, CXXScopeSpec *SS,
                         bool AllowBuiltinCreation = false,
                         bool EnteringContext = false);
