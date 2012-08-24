@@ -333,7 +333,7 @@ def FallThrough : Attr {
 }
 
 def FastCall : InheritableAttr {
-  let Spellings = [GNU<"fastcall">, GNU<"__fastcall">];
+  let Spellings = [GNU<"fastcall">, GNU<"__fastcall">, GNU<"_fastcall">];
 }
 
 def Final : InheritableAttr {
@@ -602,11 +602,11 @@ def Sentinel : InheritableAttr {
 }
 
 def StdCall : InheritableAttr {
-  let Spellings = [GNU<"stdcall">, GNU<"__stdcall">];
+  let Spellings = [GNU<"stdcall">, GNU<"__stdcall">, GNU<"_stdcall">];
 }
 
 def ThisCall : InheritableAttr {
-  let Spellings = [GNU<"thiscall">, GNU<"__thiscall">];
+  let Spellings = [GNU<"thiscall">, GNU<"__thiscall">, GNU<"_thiscall">];
 }
 
 def Pascal : InheritableAttr {
