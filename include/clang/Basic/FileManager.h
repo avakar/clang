@@ -229,6 +229,11 @@ public:
   llvm::MemoryBuffer *getBufferForFile(StringRef Filename,
                                        std::string *ErrorStr = 0);
 
+  llvm::MemoryBuffer *getTranscodedBufferForFile(const FileEntry *Entry,
+                                       off_t * OrigSize,
+                                       std::string *ErrorStr = 0,
+                                       bool isVolatile = false);
+
   /// \brief Get the 'stat' information for the given \p Path.
   ///
   /// If the path is relative, it will be resolved against the WorkingDir of the

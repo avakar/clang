@@ -520,27 +520,6 @@ void FileManager::FixupRelativePath(SmallVectorImpl<char> &path) const {
   path = NewPath;
 }
 
-#include <Windows.h>
-
-static llvm::MemoryBuffer * transcodeBuffer(llvm::MemoryBuffer const * source)
-{
-	int len = MultiByteToWideChar(CP_ACP, 0, source->getBufferStart(), source->getBufferSize(), 0, 0);
-	if (!len)
-		return llvm::MemoryBuffer::getNewUninitMemBuffer(0);
-
-	std::vector<WCHAR> wbuf(len);
-	MultiByteToWideChar(CP_ACP, 0, source->getBufferStart(), source->getBufferSize(), &wbuf[0], wbuf.size());
-
-	len = WideCharToMultiByte(CP_UTF8, 0, &wbuf[0], wbuf.size(), 0, 0, 0, 0);
-
-	llvm::MemoryBuffer * Result = llvm::MemoryBuffer::getNewUninitMemBuffer(len);
-	if (!Result)
-		return 0;
-
-	len = WideCharToMultiByte(CP_UTF8, 0, &wbuf[0], wbuf.size(), (LPSTR)Result->getBufferStart(), Result->getBufferSize(), 0, 0);
-	return Result;
-}
-
 llvm::MemoryBuffer *FileManager::
 getBufferForFile(const FileEntry *Entry, std::string *ErrorStr,
                  bool isVolatile) {
@@ -575,8 +554,6 @@ getBufferForFile(const FileEntry *Entry, std::string *ErrorStr,
     ec = llvm::MemoryBuffer::getFile(FilePath.str(), Result, FileSize);
   }
 
-  Result.reset(transcodeBuffer(Result.get()));
-
   if (ec && ErrorStr)
     *ErrorStr = ec.message();
   return Result.take();
@@ -600,6 +577,55 @@ getBufferForFile(StringRef Filename, std::string *ErrorStr) {
     *ErrorStr = ec.message();
   return Result.take();
 }
+
+#include <Windows.h>
+#undef min
+#undef max
+
+static llvm::MemoryBuffer * transcodeBuffer(llvm::MemoryBuffer const * source)
+{
+	int len = MultiByteToWideChar(CP_ACP, 0, source->getBufferStart(), source->getBufferSize(), 0, 0);
+	if (!len)
+		return llvm::MemoryBuffer::getNewUninitMemBuffer(0);
+
+	std::vector<WCHAR> wbuf(len);
+	MultiByteToWideChar(CP_ACP, 0, source->getBufferStart(), source->getBufferSize(), &wbuf[0], wbuf.size());
+
+	len = WideCharToMultiByte(CP_UTF8, 0, &wbuf[0], wbuf.size(), 0, 0, 0, 0);
+
+	llvm::MemoryBuffer * Result = llvm::MemoryBuffer::getNewUninitMemBuffer(len);
+	if (!Result)
+		return 0;
+
+	len = WideCharToMultiByte(CP_UTF8, 0, &wbuf[0], wbuf.size(), (LPSTR)Result->getBufferStart(), Result->getBufferSize(), 0, 0);
+	return Result;
+}
+
+llvm::MemoryBuffer *FileManager::
+getTranscodedBufferForFile(const FileEntry *Entry,
+                           off_t * OrigSize,
+                           std::string *ErrorStr,
+                           bool isVolatile)
+{
+  llvm::MemoryBuffer * Result = getBufferForFile(Entry, ErrorStr, isVolatile);
+  if (!Result)
+    return 0;
+
+  // Do not transcode UTF-8 buffers.
+  if (Result->getBuffer().startswith("\xEF\xBB\xBF")) {
+    if (OrigSize)
+      *OrigSize = Result->getBufferSize();
+    return Result;
+  }
+
+  llvm::MemoryBuffer * Transcoded = transcodeBuffer(Result);
+  if (Transcoded && OrigSize)
+    *OrigSize = Result->getBufferSize();
+  delete Result;
+
+  return Transcoded;
+}
+
 
 /// getStatValue - Get the 'stat' information for the specified path,
 /// using the cache to accelerate it if possible.  This returns true

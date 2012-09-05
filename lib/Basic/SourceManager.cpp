@@ -98,9 +98,10 @@ const llvm::MemoryBuffer *ContentCache::getBuffer(DiagnosticsEngine &Diag,
 
   std::string ErrorStr;
   bool isVolatile = SM.userFilesAreVolatile() && !IsSystemFile;
-  Buffer.setPointer(SM.getFileManager().getBufferForFile(ContentsEntry,
-                                                         &ErrorStr,
-                                                         isVolatile));
+
+  off_t OrigSize;
+  Buffer.setPointer(SM.getFileManager().getTranscodedBufferForFile(
+	  ContentsEntry, &OrigSize, &ErrorStr, isVolatile));
 
   // If we were unable to open the file, then we are in an inconsistent
   // situation where the content cache referenced a file which no longer
@@ -135,7 +136,7 @@ const llvm::MemoryBuffer *ContentCache::getBuffer(DiagnosticsEngine &Diag,
   
   // Check that the file's size is the same as in the file entry (which may
   // have come from a stat cache).
-  if (getRawBuffer()->getBufferSize() != (size_t)ContentsEntry->getSize()) {
+  if (OrigSize != (size_t)ContentsEntry->getSize()) {
     if (Diag.isDiagnosticInFlight())
       Diag.SetDelayedDiagnostic(diag::err_file_modified,
                                 ContentsEntry->getName());
@@ -170,7 +171,7 @@ const llvm::MemoryBuffer *ContentCache::getBuffer(DiagnosticsEngine &Diag,
       << InvalidBOM << ContentsEntry->getName();
     Buffer.setInt(Buffer.getInt() | InvalidFlag);
   }
-  
+
   if (Invalid)
     *Invalid = isBufferInvalid();
   
